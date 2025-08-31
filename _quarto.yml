@@ -1,0 +1,29 @@
+project:
+  type: website
+  output-dir: _site
+
+website:
+  title: "Time Series Analysis"
+  sidebar:
+    style: docked       
+    search: true        
+    contents:
+      - href: home.qmd
+        text: Home
+      - about.qmd
+      - introduction.qmd
+      - data-sources.qmd
+      - data-visualization.qmd
+      - exploratory-data-analysis.qmd
+      - univariate-ts-models.qmd
+      - multivariate-ts-models.qmd
+      - financial-ts-models.qmd
+      - deep-learning-ts.qmd
+      - other-ts.qmd
+      - conclusions.qmd
+
+format:
+  html:
+    theme: flatly
+    toc: true
+

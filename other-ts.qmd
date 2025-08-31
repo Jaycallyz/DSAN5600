@@ -1,0 +1,8 @@
+---
+title: "Other: Interrupted TS/ARFIMA/Spectral Analysis"
+date: "2025-08-30"
+format:
+  html:
+    embed-resources: true
+    toc: true
+---

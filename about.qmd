@@ -1,0 +1,32 @@
+---
+title: "About Me"
+date: "2025-08-30"
+format:
+  html:
+    embed-resources: true
+    toc: true
+---
+# About Yiqin Zhou
+## About Me
+![](me.jpg){width=350px style="display:block; margin-left:auto; margin-right:auto;"}
+
+Yiqin Zhou is a graduate student in the Data Science and Analytics program at Georgetown University. She received her B.S. in Accounting from the Ocean University of China. During her undergraduate studies, she gained professional experience through internships in finance and auditing at companies such as Converse and BDO Global.
+
+Originally from China, Yiqin is eager to deepen her expertise in Data Science, with a particular interest in Time Series Analysis.
+
+## Education
+
+- M.S. Data Science & Analytics, Georgetown University (2024–2026, expected)  
+- B.A. Accounting, Ocean University of China
+
+## Interest
+
+- 📊 Data Science & Machine Learning  
+- 💼 Finance, Risk & Product Analytics  
+- 🌍 Traveling & Exploring Cultures  
+- 🎵 K-pop (ENHYPEN, ILLIT) 
+
+## Contact
+- Email: yz1395@georgetown.edu  
+- GitHub: [Jaycallyz](https://github.com/Jaycallyz)  
+- LinkedIn: [My LinkedIn](https://linkedin.com/in/yiqin-zhou-a28482328)
