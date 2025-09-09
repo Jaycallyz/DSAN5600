@@ -6,3 +6,141 @@ format:
     embed-resources: true
     toc: true
 ---
+# 1. Port of Los Angeles – Monthly Container Statistics
+
+**Data Source**: [Port of Los Angeles – Statistics](https://www.portoflosangeles.org/business/statistics/container-statistics) 
+
+![2024 Port of LA Monthly TEUs](pic/teu.png)
+<small>*2024 Port of LA Monthly TEUs*</small>
+
+**Description**:  
+This dataset contains **monthly container throughput (TEU)** at the Port of Los Angeles from **January 1995 to December 2024**.  
+The data includes detailed breakdowns: 
+
+- Loaded Imports
+
+- Empty Imports
+
+- Total Imports
+
+- Loaded Exports
+
+- Empty Exports
+
+- Total Exports
+
+- Total TEUs
+
+# 2. Energy & Currency Factors
+## 2.1 WTI Oil Price (WTISPLC)
+**Data Source**: [FRED – Spot Crude Oil Price: West Texas Intermediate (WTI)](https://fred.stlouisfed.org/series/WTISPLC?utm_source=chatgpt.com)
+
+![WTI Crude Oil Price](pic/wti.png)  
+<small>*WTI Crude Oil Price (Monthly), Source: FRED*</small>
+
+**Description**:  
+This dataset contains the **monthly spot price of West Texas Intermediate (WTI) crude oil**, expressed in U.S. dollars per barrel.  
+The series covers **January 1946 to the present (latest data available: 2025)** and is maintained by the Federal Reserve Bank of St. Louis (FRED).  
+
+As a key indicator of **energy costs**, WTI oil prices strongly influence global shipping and logistics expenses.  
+In this project, the WTI series will be used as an **external variable** to study how fluctuations in fuel costs impact the Port of Los Angeles container throughput (TEUs).
+
+## 2.2 Brent Crude Oil Price (MCOILBRENTEU)
+**Data Source**: [FRED – Crude Oil Prices: Brent – Europe (MCOILBRENTEU)](https://fred.stlouisfed.org/series/MCOILBRENTEU)
+
+![Brent Crude Oil Price](pic/brent.png)  
+<small>*Brent Crude Oil Price (Monthly), Source: FRED*</small>
+
+**Description**:  
+This dataset contains the **monthly spot price of Brent crude oil**, expressed in U.S. dollars per barrel.  
+The series covers **May 1987 to the present (latest data available: 2025)** and is maintained by the Federal Reserve Bank of St. Louis (FRED).  
+
+Brent crude serves as the **global benchmark for oil prices**, complementing WTI as the U.S. benchmark.  
+In this project, the Brent series will be used to compare with WTI and analyze how **global energy price movements** influence container throughput at the Port of Los Angeles.
+
+## 2.3 U.S. Dollar Index (DTWEXBGS)
+**Data Source**: [FRED – Nominal Broad U.S. Dollar Index (DTWEXBGS)](https://fred.stlouisfed.org/series/DTWEXBGS)
+
+![U.S. Dollar Index](pic/usd.png)  
+<small>*U.S. Dollar Index (Monthly), Source: FRED*</small>
+
+**Description**:  
+This dataset contains the **Nominal Broad U.S. Dollar Index**, a trade-weighted measure of the value of the U.S. dollar relative to a broad set of foreign currencies.  
+The series covers **January 2006 to the present (latest data available: 2025)** and is maintained by the Federal Reserve Bank of St. Louis (FRED).  
+
+The U.S. Dollar Index is a critical financial indicator because it reflects **currency strength** and influences U.S. trade competitiveness.  
+In this project, the index will be used as an **external driver** to study how exchange rate fluctuations affect the Port of Los Angeles container throughput (TEUs), especially in terms of imports and exports.
+
+# 2.4 RMB/USD Exchange Rate (DEXCHUS)
+
+**Data Source**: [FRED – China / U.S. Foreign Exchange Rate (DEXCHUS)](https://fred.stlouisfed.org/series/DEXCHUS)
+
+![RMB/USD Exchange Rate](pic/rmbusd.png)  
+<small>*RMB/USD Exchange Rate (CNY per USD, Monthly Average), Source: FRED*</small>
+
+**Description**:  
+This dataset contains the **China / U.S. foreign exchange rate (CNY per USD)**, provided by the Federal Reserve Bank of St. Louis (FRED).  
+The series covers **January 1981 to the present (latest data available: 2025)**, with daily frequency that can be aggregated to monthly averages for analysis.  
+
+The RMB/USD exchange rate is a critical variable for studying **U.S.–China trade flows**.  
+A depreciation of the RMB (more CNY per USD) makes Chinese exports cheaper, potentially increasing U.S. imports through the Port of Los Angeles.  
+Conversely, an appreciation of the RMB makes Chinese exports more expensive, potentially reducing container throughput.  
+In this project, the exchange rate will be used as an **external driver** to analyze its influence on the Port of Los Angeles TEU volumes.
+
+# 3. Supply Chain & Policy Shocks
+## 3.1 Global Supply Chain Pressure Index (GSCPI)
+
+**Data Source**: [New York Fed – Global Supply Chain Pressure Index (GSCPI)](https://www.newyorkfed.org/research/policy/gscpi)  
+**Download Link**: [GSCPI Monthly Data (Excel)](https://www.newyorkfed.org/medialibrary/research/interactives/gscpi/downloads/gscpi_data.xlsx)
+
+![Global Supply Chain Pressure Index](pic/gscpi.png)  
+<small>*Global Supply Chain Pressure Index (Monthly), Source: NY Fed*</small>
+
+**Description**:  
+The GSCPI is a composite monthly index measuring **global supply chain pressure**, incorporating factors like sea and air freight costs, delivery times, inventory backlogs, and manufacturing PMI components. It covers **January 1997 to present**, with recent months updated regularly. A higher index value indicates greater stress in global supply chains.  
+
+In this project, the GSCPI will be used as an **external variable** to analyze whether increased supply chain disruptions correspond with changes in container throughput at the Port of Los Angeles.
+
+## 3.2 COVID-19 Stringency Index (U.S. & China)
+
+**Data Source**: [Oxford COVID-19 Government Response Tracker (OxCGRT)](https://github.com/OxCGRT/covid-policy-dataset/blob/main/data/timeseries_indices/OxCGRT_timeseries_StringencyIndex_v1.csv)
+
+![COVID-19 Stringency Index – U.S. vs China](pic/stringency_us_china.png)  
+<small>*Monthly average Stringency Index for the United States and China, Source: OxCGRT*</small>
+
+**Description**:  
+This dataset provides the **COVID-19 Government Response Stringency Index** (0–100), compiled by the University of Oxford. The index measures the strictness of government containment policies, including school closures, travel restrictions, stay-at-home requirements, and public information campaigns.  
+- **United States (USA)**: Represents demand-side disruptions, reflecting domestic policy restrictions that affected U.S. imports and consumption.  
+- **China (CHN)**: Represents supply-side disruptions, reflecting export-side constraints caused by factory shutdowns, port closures, and mobility restrictions.  
+
+The data are available daily from **January 2020 to the present**. For this project, they are aggregated to **monthly averages** to align with the Port of Los Angeles container throughput (TEUs).  
+
+## 3.3 Tariff-Weighted Index (Advanced Tariff Shock Indicator)
+
+**Data Source**: [Section 301 Tariff Lists](hhttps://ustr.gov/issue-areas/enforcement/section-301-investigations/tariff-actions?utm_source=chatgpt.com)
+- **USTR – Section 301 Tariff Lists** (List 1–4 dollar coverage) :contentReference[oaicite:4]{index=4}
+
+- **Tariff Rates**: List 1 & List 2 = 25%; List 3 ≈ 15% (10% → 25% average); List 4 ≈ 15% :contentReference[oaicite:5]{index=5}  
+
+#### Calculation:
+| List | Coverage (USD billions) | Tariff Rate (%) | Weighted Value |
+|------|--------------------------|------------------|----------------|
+| 1    | 34                      | 25              | 8.5           |
+| 2    | 16                      | 25              | 4.0           |
+| 3    | 200                     | 15              | 30.0          |
+| 4    | 300                     | 15              | 45.0          |
+
+Cumulative index over time:
+- 2018-07 → 8.5  
+- 2018-08 → 12.5  
+- 2018-09 → 42.5  
+- 2019-09 → 87.5  
+
+**Description**:  
+The Tariff-Weighted Index reflects both the **magnitude (dollar value)** and **intensity (tariff rate)** of U.S. Section 301 actions against Chinese imports. This continuous measure provides a nuanced view of policy-induced trade shocks over time, rather than a simple 0/1 indicator.
+
+# 4. Financial Market & Demand Indicators
+## 4.1 S&P 500 Index (SP500)
+
+
+

@@ -6,3 +6,7 @@ format:
     embed-resources: true
     toc: true
 ---
+# Understanding U.S. West Coast Port Throughput
+The Port of Los Angeles is the largest container port in the United States and a vital gateway for trans-Pacific trade between Asia and North America. As a critical hub in the global supply chain, the port’s monthly container throughput (measured in TEU—twenty-foot equivalent units) reflects not only the health of U.S. trade flows but also broader dynamics in shipping markets, energy costs, currency strength, and policy changes. Fluctuations in throughput affect shipping companies, retailers, manufacturers, and consumers worldwide, making it an important indicator of both logistical capacity and economic resilience.
+
+This project focuses on analyzing the monthly dynamics of container throughput at the Port of Los Angeles. By integrating external drivers such as global freight indices, oil prices, the U.S. dollar index, and major policy events (e.g., COVID-19 disruptions and tariff changes), this study seeks to uncover seasonal cycles, structural breaks, and causal relationships. Through comprehensive time series modeling, the project aims to provide insights into the resilience and vulnerabilities of U.S. maritime trade.

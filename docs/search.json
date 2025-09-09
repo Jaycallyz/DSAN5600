@@ -68,5 +68,43 @@
     "crumbs": [
       "Home"
     ]
+  },
+  {
+    "objectID": "introduction.html",
+    "href": "introduction.html",
+    "title": "Introduction",
+    "section": "",
+    "text": "Understanding U.S. West Coast Port Throughput\nThe Port of Los Angeles is the largest container port in the United States and a vital gateway for trans-Pacific trade between Asia and North America. As a critical hub in the global supply chain, the port’s monthly container throughput (measured in TEU—twenty-foot equivalent units) reflects not only the health of U.S. trade flows but also broader dynamics in shipping markets, energy costs, currency strength, and policy changes. Fluctuations in throughput affect shipping companies, retailers, manufacturers, and consumers worldwide, making it an important indicator of both logistical capacity and economic resilience.\nThis project focuses on analyzing the monthly dynamics of container throughput at the Port of Los Angeles. By integrating external drivers such as global freight indices, oil prices, the U.S. dollar index, and major policy events (e.g., COVID-19 disruptions and tariff changes), this study seeks to uncover seasonal cycles, structural breaks, and causal relationships. Through comprehensive time series modeling, the project aims to provide insights into the resilience and vulnerabilities of U.S. maritime trade.",
+    "crumbs": [
+      "Introduction"
+    ]
+  },
+  {
+    "objectID": "data_source.html",
+    "href": "data_source.html",
+    "title": "Data Sources",
+    "section": "",
+    "text": "Data Source: Port of Los Angeles – Statistics\n 2024 Port of LA Monthly TEUs\nDescription:\nThis dataset contains monthly container throughput (TEU) at the Port of Los Angeles from January 1995 to December 2024.\nThe data includes detailed breakdowns:\n- Loaded Imports\n\nEmpty Imports\nTotal Imports\nLoaded Exports\nEmpty Exports\nTotal Exports\nTotal TEUs"
+  },
+  {
+    "objectID": "data_source.html#wti-oil-price-wtisplc",
+    "href": "data_source.html#wti-oil-price-wtisplc",
+    "title": "Data Sources",
+    "section": "WTI Oil Price (WTISPLC)",
+    "text": "WTI Oil Price (WTISPLC)\nData Source: FRED – Spot Crude Oil Price: West Texas Intermediate (WTI)\n\nWTI Crude Oil Price (Monthly), Source: FRED\nDescription:\nThis dataset contains the monthly spot price of West Texas Intermediate (WTI) crude oil, expressed in U.S. dollars per barrel.\nThe series covers January 1946 to the present (latest data available: 2025) and is maintained by the Federal Reserve Bank of St. Louis (FRED).\nAs a key indicator of energy costs, WTI oil prices strongly influence global shipping and logistics expenses.\nIn this project, the WTI series will be used as an external variable to study how fluctuations in fuel costs impact the Port of Los Angeles container throughput (TEUs)."
+  },
+  {
+    "objectID": "data_source.html#brent-crude-oil-price-mcoilbrenteu",
+    "href": "data_source.html#brent-crude-oil-price-mcoilbrenteu",
+    "title": "Data Sources",
+    "section": "Brent Crude Oil Price (MCOILBRENTEU)",
+    "text": "Brent Crude Oil Price (MCOILBRENTEU)\nData Source: FRED – Crude Oil Prices: Brent – Europe (MCOILBRENTEU)\n\nBrent Crude Oil Price (Monthly), Source: FRED\nDescription:\nThis dataset contains the monthly spot price of Brent crude oil, expressed in U.S. dollars per barrel.\nThe series covers May 1987 to the present (latest data available: 2025) and is maintained by the Federal Reserve Bank of St. Louis (FRED).\nBrent crude serves as the global benchmark for oil prices, complementing WTI as the U.S. benchmark.\nIn this project, the Brent series will be used to compare with WTI and analyze how global energy price movements influence container throughput at the Port of Los Angeles."
+  },
+  {
+    "objectID": "data_source.html#u.s.-dollar-index-dtwexbgs",
+    "href": "data_source.html#u.s.-dollar-index-dtwexbgs",
+    "title": "Data Sources",
+    "section": "U.S. Dollar Index (DTWEXBGS)",
+    "text": "U.S. Dollar Index (DTWEXBGS)\nData Source: FRED – Nominal Broad U.S. Dollar Index (DTWEXBGS)\n\nU.S. Dollar Index (Monthly), Source: FRED\nDescription:\nThis dataset contains the Nominal Broad U.S. Dollar Index, a trade-weighted measure of the value of the U.S. dollar relative to a broad set of foreign currencies.\nThe series covers January 2006 to the present (latest data available: 2025) and is maintained by the Federal Reserve Bank of St. Louis (FRED).\nThe U.S. Dollar Index is a critical financial indicator because it reflects currency strength and influences U.S. trade competitiveness.\nIn this project, the index will be used as an external driver to study how exchange rate fluctuations affect the Port of Los Angeles container throughput (TEUs), especially in terms of imports and exports."
   }
 ]
