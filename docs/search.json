@@ -84,70 +84,100 @@
     "href": "data_source.html",
     "title": "Data Sources",
     "section": "",
-    "text": "Data Source: Port of Los Angeles – Statistics\n 2024 Port of LA Monthly TEUs\nDescription:\nThis dataset contains monthly container throughput (TEU) at the Port of Los Angeles from January 1995 to December 2024.\nThe data includes detailed breakdowns:\n\nLoaded Imports\nEmpty Imports\nTotal Imports\nLoaded Exports\nEmpty Exports\nTotal Exports\nTotal TEUs"
+    "text": "Data Source: Port of Los Angeles – Statistics\n 2024 Port of LA Monthly TEUs\nDescription:\nThis dataset contains monthly container throughput (TEU) at the Port of Los Angeles from January 1995 to December 2024.\nThe data includes detailed breakdowns:\n\nLoaded Imports\nEmpty Imports\nTotal Imports\nLoaded Exports\nEmpty Exports\nTotal Exports\nTotal TEUs",
+    "crumbs": [
+      "Data Sources"
+    ]
   },
   {
     "objectID": "data_source.html#wti-oil-price-wtisplc",
     "href": "data_source.html#wti-oil-price-wtisplc",
     "title": "Data Sources",
     "section": "2.1 WTI Oil Price (WTISPLC)",
-    "text": "2.1 WTI Oil Price (WTISPLC)\nData Source: FRED – Spot Crude Oil Price: West Texas Intermediate (WTI)\n\nWTI Crude Oil Price (Monthly), Source: FRED\nDescription:\nThis dataset contains the monthly spot price of West Texas Intermediate (WTI) crude oil, expressed in U.S. dollars per barrel.\nThe series covers January 1946 to the present (latest data available: 2025) and is maintained by the Federal Reserve Bank of St. Louis (FRED).\nAs a key indicator of energy costs, WTI oil prices strongly influence global shipping and logistics expenses.\nIn this project, the WTI series will be used as an external variable to study how fluctuations in fuel costs impact the Port of Los Angeles container throughput (TEUs)."
+    "text": "2.1 WTI Oil Price (WTISPLC)\nData Source: FRED – Spot Crude Oil Price: West Texas Intermediate (WTI)\n\nWTI Crude Oil Price (Monthly), Source: FRED\nDescription:\nThis dataset contains the monthly spot price of West Texas Intermediate (WTI) crude oil, expressed in U.S. dollars per barrel.\nThe series covers January 1946 to the present (latest data available: 2025) and is maintained by the Federal Reserve Bank of St. Louis (FRED).\nAs a key indicator of energy costs, WTI oil prices strongly influence global shipping and logistics expenses.\nIn this project, the WTI series will be used as an external variable to study how fluctuations in fuel costs impact the Port of Los Angeles container throughput (TEUs).",
+    "crumbs": [
+      "Data Sources"
+    ]
   },
   {
     "objectID": "data_source.html#brent-crude-oil-price-mcoilbrenteu",
     "href": "data_source.html#brent-crude-oil-price-mcoilbrenteu",
     "title": "Data Sources",
     "section": "2.2 Brent Crude Oil Price (MCOILBRENTEU)",
-    "text": "2.2 Brent Crude Oil Price (MCOILBRENTEU)\nData Source: FRED – Crude Oil Prices: Brent – Europe (MCOILBRENTEU)\n\nBrent Crude Oil Price (Monthly), Source: FRED\nDescription:\nThis dataset contains the monthly spot price of Brent crude oil, expressed in U.S. dollars per barrel.\nThe series covers May 1987 to the present (latest data available: 2025) and is maintained by the Federal Reserve Bank of St. Louis (FRED).\nBrent crude serves as the global benchmark for oil prices, complementing WTI as the U.S. benchmark.\nIn this project, the Brent series will be used to compare with WTI and analyze how global energy price movements influence container throughput at the Port of Los Angeles."
+    "text": "2.2 Brent Crude Oil Price (MCOILBRENTEU)\nData Source: FRED – Crude Oil Prices: Brent – Europe (MCOILBRENTEU)\n\nBrent Crude Oil Price (Monthly), Source: FRED\nDescription:\nThis dataset contains the monthly spot price of Brent crude oil, expressed in U.S. dollars per barrel.\nThe series covers May 1987 to the present (latest data available: 2025) and is maintained by the Federal Reserve Bank of St. Louis (FRED).\nBrent crude serves as the global benchmark for oil prices, complementing WTI as the U.S. benchmark.\nIn this project, the Brent series will be used to compare with WTI and analyze how global energy price movements influence container throughput at the Port of Los Angeles.",
+    "crumbs": [
+      "Data Sources"
+    ]
   },
   {
     "objectID": "data_source.html#u.s.-dollar-index-dtwexbgs",
     "href": "data_source.html#u.s.-dollar-index-dtwexbgs",
     "title": "Data Sources",
     "section": "2.3 U.S. Dollar Index (DTWEXBGS)",
-    "text": "2.3 U.S. Dollar Index (DTWEXBGS)\nData Source: FRED – Nominal Broad U.S. Dollar Index (DTWEXBGS)\n\nU.S. Dollar Index (Monthly), Source: FRED\nDescription:\nThis dataset contains the Nominal Broad U.S. Dollar Index, a trade-weighted measure of the value of the U.S. dollar relative to a broad set of foreign currencies.\nThe series covers January 2006 to the present (latest data available: 2025) and is maintained by the Federal Reserve Bank of St. Louis (FRED).\nThe U.S. Dollar Index is a critical financial indicator because it reflects currency strength and influences U.S. trade competitiveness.\nIn this project, the index will be used as an external driver to study how exchange rate fluctuations affect the Port of Los Angeles container throughput (TEUs), especially in terms of imports and exports."
+    "text": "2.3 U.S. Dollar Index (DTWEXBGS)\nData Source: FRED – Nominal Broad U.S. Dollar Index (DTWEXBGS)\n\nU.S. Dollar Index (Monthly), Source: FRED\nDescription:\nThis dataset contains the Nominal Broad U.S. Dollar Index, a trade-weighted measure of the value of the U.S. dollar relative to a broad set of foreign currencies.\nThe series covers January 2006 to the present (latest data available: 2025) and is maintained by the Federal Reserve Bank of St. Louis (FRED).\nThe U.S. Dollar Index is a critical financial indicator because it reflects currency strength and influences U.S. trade competitiveness.\nIn this project, the index will be used as an external driver to study how exchange rate fluctuations affect the Port of Los Angeles container throughput (TEUs), especially in terms of imports and exports.",
+    "crumbs": [
+      "Data Sources"
+    ]
   },
   {
     "objectID": "data_source.html#global-supply-chain-pressure-index-gscpi",
     "href": "data_source.html#global-supply-chain-pressure-index-gscpi",
     "title": "Data Sources",
     "section": "3.1 Global Supply Chain Pressure Index (GSCPI)",
-    "text": "3.1 Global Supply Chain Pressure Index (GSCPI)\nData Source: New York Fed – Global Supply Chain Pressure Index (GSCPI)\nDownload Link: GSCPI Monthly Data (Excel)\n\nGlobal Supply Chain Pressure Index (Monthly), Source: NY Fed\nDescription:\nThe GSCPI is a composite monthly index measuring global supply chain pressure, incorporating factors like sea and air freight costs, delivery times, inventory backlogs, and manufacturing PMI components. It covers January 1997 to present, with recent months updated regularly. A higher index value indicates greater stress in global supply chains.\nIn this project, the GSCPI will be used as an external variable to analyze whether increased supply chain disruptions correspond with changes in container throughput at the Port of Los Angeles."
+    "text": "3.1 Global Supply Chain Pressure Index (GSCPI)\nData Source: New York Fed – Global Supply Chain Pressure Index (GSCPI)\nDownload Link: GSCPI Monthly Data (Excel)\n\nGlobal Supply Chain Pressure Index (Monthly), Source: NY Fed\nDescription:\nThe GSCPI is a composite monthly index measuring global supply chain pressure, incorporating factors like sea and air freight costs, delivery times, inventory backlogs, and manufacturing PMI components. It covers January 1997 to present, with recent months updated regularly. A higher index value indicates greater stress in global supply chains.\nIn this project, the GSCPI will be used as an external variable to analyze whether increased supply chain disruptions correspond with changes in container throughput at the Port of Los Angeles.",
+    "crumbs": [
+      "Data Sources"
+    ]
   },
   {
     "objectID": "data_source.html#covid-19-stringency-index-u.s.-china",
     "href": "data_source.html#covid-19-stringency-index-u.s.-china",
     "title": "Data Sources",
     "section": "3.2 COVID-19 Stringency Index (U.S. & China)",
-    "text": "3.2 COVID-19 Stringency Index (U.S. & China)\nData Source: Oxford COVID-19 Government Response Tracker (OxCGRT)\n\nMonthly average Stringency Index for the United States and China, Source: OxCGRT\nDescription:\nThis dataset provides the COVID-19 Government Response Stringency Index (0–100), compiled by the University of Oxford. The index measures the strictness of government containment policies, including school closures, travel restrictions, stay-at-home requirements, and public information campaigns.\n- United States (USA): Represents demand-side disruptions, reflecting domestic policy restrictions that affected U.S. imports and consumption.\n- China (CHN): Represents supply-side disruptions, reflecting export-side constraints caused by factory shutdowns, port closures, and mobility restrictions.\nThe data are available daily from January 2020 to the present. For this project, they are aggregated to monthly averages to align with the Port of Los Angeles container throughput (TEUs)."
+    "text": "3.2 COVID-19 Stringency Index (U.S. & China)\nData Source: Oxford COVID-19 Government Response Tracker (OxCGRT)\n\nMonthly average Stringency Index for the United States and China, Source: OxCGRT\nDescription:\nThis dataset provides the COVID-19 Government Response Stringency Index (0–100), compiled by the University of Oxford. The index measures the strictness of government containment policies, including school closures, travel restrictions, stay-at-home requirements, and public information campaigns.\n- United States (USA): Represents demand-side disruptions, reflecting domestic policy restrictions that affected U.S. imports and consumption.\n- China (CHN): Represents supply-side disruptions, reflecting export-side constraints caused by factory shutdowns, port closures, and mobility restrictions.\nThe data are available daily from January 2020 to the present. For this project, they are aggregated to monthly averages to align with the Port of Los Angeles container throughput (TEUs).",
+    "crumbs": [
+      "Data Sources"
+    ]
   },
   {
     "objectID": "data_source.html#tariff-weighted-index-advanced-tariff-shock-indicator",
     "href": "data_source.html#tariff-weighted-index-advanced-tariff-shock-indicator",
     "title": "Data Sources",
     "section": "3.3 Tariff-Weighted Index (Advanced Tariff Shock Indicator)",
-    "text": "3.3 Tariff-Weighted Index (Advanced Tariff Shock Indicator)\nData Source: Section 301 Tariff Lists - USTR – Section 301 Tariff Lists (List 1–4 dollar coverage) :contentReferenceoaicite:4\n\nTariff Rates: List 1 & List 2 = 25%; List 3 ≈ 15% (10% → 25% average); List 4 ≈ 15% :contentReferenceoaicite:5\n\n\nCalculation:\n\n\n\nList\nCoverage (USD billions)\nTariff Rate (%)\nWeighted Value\n\n\n\n\n1\n34\n25\n8.5\n\n\n2\n16\n25\n4.0\n\n\n3\n200\n15\n30.0\n\n\n4\n300\n15\n45.0\n\n\n\nCumulative index over time: - 2018-07 → 8.5\n- 2018-08 → 12.5\n- 2018-09 → 42.5\n- 2019-09 → 87.5\nDescription:\nThe Tariff-Weighted Index reflects both the magnitude (dollar value) and intensity (tariff rate) of U.S. Section 301 actions against Chinese imports. This continuous measure provides a nuanced view of policy-induced trade shocks over time, rather than a simple 0/1 indicator."
+    "text": "3.3 Tariff-Weighted Index (Advanced Tariff Shock Indicator)\nData Source: Section 301 Tariff Lists - USTR – Section 301 Tariff Lists (List 1–4 dollar coverage) :contentReferenceoaicite:4\n\nTariff Rates: List 1 & List 2 = 25%; List 3 ≈ 15% (10% → 25% average); List 4 ≈ 15% :contentReferenceoaicite:5\n\n\nCalculation:\n\n\n\nList\nCoverage (USD billions)\nTariff Rate (%)\nWeighted Value\n\n\n\n\n1\n34\n25\n8.5\n\n\n2\n16\n25\n4.0\n\n\n3\n200\n15\n30.0\n\n\n4\n300\n15\n45.0\n\n\n\nCumulative index over time: - 2018-07 → 8.5\n- 2018-08 → 12.5\n- 2018-09 → 42.5\n- 2019-09 → 87.5\nDescription:\nThe Tariff-Weighted Index reflects both the magnitude (dollar value) and intensity (tariff rate) of U.S. Section 301 actions against Chinese imports. This continuous measure provides a nuanced view of policy-induced trade shocks over time, rather than a simple 0/1 indicator.",
+    "crumbs": [
+      "Data Sources"
+    ]
   },
   {
     "objectID": "data_source.html#sp-500-index-sp500",
     "href": "data_source.html#sp-500-index-sp500",
     "title": "Data Sources",
     "section": "4.1 S&P 500 Index (SP500)",
-    "text": "4.1 S&P 500 Index (SP500)\nData Source: FRED – S&P 500\n\nDaily S&P 500 Index (aggregated to monthly for analysis). Source: FRED\nDescription:\nThis dataset provides the S&P 500 Index, a broad gauge of U.S. equity market performance and risk sentiment.\nDaily data will be aggregated to monthly to align with port TEU frequency."
+    "text": "4.1 S&P 500 Index (SP500)\nData Source: FRED – S&P 500\n\nDaily S&P 500 Index (aggregated to monthly for analysis). Source: FRED\nDescription:\nThis dataset provides the S&P 500 Index, a broad gauge of U.S. equity market performance and risk sentiment.\nDaily data will be aggregated to monthly to align with port TEU frequency.",
+    "crumbs": [
+      "Data Sources"
+    ]
   },
   {
     "objectID": "data_source.html#dow-jones-transportation-average-djt",
     "href": "data_source.html#dow-jones-transportation-average-djt",
     "title": "Data Sources",
     "section": "4.2 Dow Jones Transportation Average (^DJT)",
-    "text": "4.2 Dow Jones Transportation Average (^DJT)\nData Source: Yahoo Finance – ^DJT\n\nTransportation stocks index (or IYT ETF) as a logistics/transport proxy. Source: Yahoo Finance\nDescription:\nThe Dow Jones Transportation Average (or IYT ETF) tracks transportation-related companies (airlines, rails, trucking).\nIt captures investor expectations for logistics activity and freight demand."
+    "text": "4.2 Dow Jones Transportation Average (^DJT)\nData Source: Yahoo Finance – ^DJT\n\nTransportation stocks index (or IYT ETF) as a logistics/transport proxy. Source: Yahoo Finance\nDescription:\nThe Dow Jones Transportation Average (or IYT ETF) tracks transportation-related companies (airlines, rails, trucking).\nIt captures investor expectations for logistics activity and freight demand.",
+    "crumbs": [
+      "Data Sources"
+    ]
   },
   {
     "objectID": "data_source.html#u.s.-retail-food-services-sales-rsafs",
     "href": "data_source.html#u.s.-retail-food-services-sales-rsafs",
     "title": "Data Sources",
     "section": "4.3 U.S. Retail & Food Services Sales (RSAFS)",
-    "text": "4.3 U.S. Retail & Food Services Sales (RSAFS)\nData Source: FRED – Retail and Food Services Sales (RSAFS)\n\nMonthly U.S. Retail & Food Services Sales (seasonally adjusted). Source: FRED\nDescription:\nMonthly retail spending (seasonally adjusted, billions of dollars).\nIt reflects household demand and import pull-through, especially for consumer goods arriving via West Coast ports."
+    "text": "4.3 U.S. Retail & Food Services Sales (RSAFS)\nData Source: FRED – Retail and Food Services Sales (RSAFS)\n\nMonthly U.S. Retail & Food Services Sales (seasonally adjusted). Source: FRED\nDescription:\nMonthly retail spending (seasonally adjusted, billions of dollars).\nIt reflects household demand and import pull-through, especially for consumer goods arriving via West Coast ports.",
+    "crumbs": [
+      "Data Sources"
+    ]
   },
   {
     "objectID": "data_source.html#ism-manufacturing-pmi-napm",

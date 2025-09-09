@@ -12,9 +12,9 @@ website:
         text: Home
       - about.qmd
       - introduction.qmd
-      - data-sources.qmd
-      - data-visualization.qmd
-      - exploratory-data-analysis.qmd
+      - data_source.qmd
+      - data_visualization.qmd
+      - eda.qmd
       - univariate-ts-models.qmd
       - multivariate-ts-models.qmd
       - financial-ts-models.qmd
