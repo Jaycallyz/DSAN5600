@@ -141,6 +141,37 @@ The Tariff-Weighted Index reflects both the **magnitude (dollar value)** and **i
 
 # 4. Financial Market & Demand Indicators
 ## 4.1 S&P 500 Index (SP500)
+**Data Source**: [FRED – S&P 500](https://fred.stlouisfed.org/series/SP500)
+
+![S&P 500 Index](pic/sp500.png)  
+<small>*Daily S&P 500 Index (aggregated to monthly for analysis). Source: FRED*</small>
+
+**Description**:  
+This dataset provides the **S&P 500 Index**, a broad gauge of U.S. equity market performance and risk sentiment.  
+Daily data will be **aggregated to monthly** to align with port TEU frequency.  
+
+## 4.2 Dow Jones Transportation Average (^DJT)  
+
+**Data Source**: [Yahoo Finance – ^DJT](https://finance.yahoo.com/quote/%5EDJT)  
+
+![Dow Jones Transportation / IYT](pic/djt_iyt.png)  
+<small>*Transportation stocks index (or IYT ETF) as a logistics/transport proxy. Source: Yahoo Finance*</small>
+
+**Description**:  
+The **Dow Jones Transportation Average** (or **IYT ETF**) tracks transportation-related companies (airlines, rails, trucking).  
+It captures investor expectations for logistics activity and freight demand.  
+
+## 4.3 U.S. Retail & Food Services Sales (RSAFS)
+
+**Data Source**: [FRED – Retail and Food Services Sales (RSAFS)](https://fred.stlouisfed.org/series/RSAFS)
+
+![U.S. Retail Sales](pic/retail_sales.png)  
+<small>*Monthly U.S. Retail & Food Services Sales (seasonally adjusted). Source: FRED*</small>
+
+**Description**:  
+Monthly **retail spending** (seasonally adjusted, billions of dollars).  
+It reflects household demand and import pull-through, especially for consumer goods arriving via West Coast ports.  
+
 
 
 

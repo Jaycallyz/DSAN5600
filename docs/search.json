@@ -74,7 +74,7 @@
     "href": "introduction.html",
     "title": "Introduction",
     "section": "",
-    "text": "Understanding U.S. West Coast Port Throughput\nThe Port of Los Angeles is the largest container port in the United States and a vital gateway for trans-Pacific trade between Asia and North America. As a critical hub in the global supply chain, the port’s monthly container throughput (measured in TEU—twenty-foot equivalent units) reflects not only the health of U.S. trade flows but also broader dynamics in shipping markets, energy costs, currency strength, and policy changes. Fluctuations in throughput affect shipping companies, retailers, manufacturers, and consumers worldwide, making it an important indicator of both logistical capacity and economic resilience.\nThis project focuses on analyzing the monthly dynamics of container throughput at the Port of Los Angeles. By integrating external drivers such as global freight indices, oil prices, the U.S. dollar index, and major policy events (e.g., COVID-19 disruptions and tariff changes), this study seeks to uncover seasonal cycles, structural breaks, and causal relationships. Through comprehensive time series modeling, the project aims to provide insights into the resilience and vulnerabilities of U.S. maritime trade.",
+    "text": "The Port of Los Angeles is the largest container port in the United States and a key gateway for U.S.–China trade across the Pacific. As a hub in the global supply chain, its monthly container throughput (measured in TEUs) reflects both U.S. trade activity and broader forces shaping global commerce. Changes in throughput affect shipping companies, retailers, manufacturers, and consumers, making it an important indicator of economic resilience.\nThis project analyzes the monthly dynamics of Los Angeles port throughput from four perspectives. The first is the structure of trade flows, including loaded imports, loaded exports, and empty containers. The second examines external cost drivers such as oil prices, the U.S. dollar index, and the RMB/USD exchange rate. The third focuses on shocks to the supply chain, including COVID-19, tariff actions, and congestion events. The fourth looks at financial markets and domestic demand through indicators such as the S&P 500, the Dow Jones Transportation Average, and U.S. retail sales.\nBy combining these perspectives, the study explores seasonal patterns, structural breaks, and external influences on U.S. maritime trade. The analysis of the Port of Los Angeles highlights both the vulnerabilities and resilience of U.S.–China trade and its role in the global supply chain.",
     "crumbs": [
       "Introduction"
     ]
@@ -84,27 +84,116 @@
     "href": "data_source.html",
     "title": "Data Sources",
     "section": "",
-    "text": "Data Source: Port of Los Angeles – Statistics\n 2024 Port of LA Monthly TEUs\nDescription:\nThis dataset contains monthly container throughput (TEU) at the Port of Los Angeles from January 1995 to December 2024.\nThe data includes detailed breakdowns:\n- Loaded Imports\n\nEmpty Imports\nTotal Imports\nLoaded Exports\nEmpty Exports\nTotal Exports\nTotal TEUs"
+    "text": "Data Source: Port of Los Angeles – Statistics\n 2024 Port of LA Monthly TEUs\nDescription:\nThis dataset contains monthly container throughput (TEU) at the Port of Los Angeles from January 1995 to December 2024.\nThe data includes detailed breakdowns:\n\nLoaded Imports\nEmpty Imports\nTotal Imports\nLoaded Exports\nEmpty Exports\nTotal Exports\nTotal TEUs"
   },
   {
     "objectID": "data_source.html#wti-oil-price-wtisplc",
     "href": "data_source.html#wti-oil-price-wtisplc",
     "title": "Data Sources",
-    "section": "WTI Oil Price (WTISPLC)",
-    "text": "WTI Oil Price (WTISPLC)\nData Source: FRED – Spot Crude Oil Price: West Texas Intermediate (WTI)\n\nWTI Crude Oil Price (Monthly), Source: FRED\nDescription:\nThis dataset contains the monthly spot price of West Texas Intermediate (WTI) crude oil, expressed in U.S. dollars per barrel.\nThe series covers January 1946 to the present (latest data available: 2025) and is maintained by the Federal Reserve Bank of St. Louis (FRED).\nAs a key indicator of energy costs, WTI oil prices strongly influence global shipping and logistics expenses.\nIn this project, the WTI series will be used as an external variable to study how fluctuations in fuel costs impact the Port of Los Angeles container throughput (TEUs)."
+    "section": "2.1 WTI Oil Price (WTISPLC)",
+    "text": "2.1 WTI Oil Price (WTISPLC)\nData Source: FRED – Spot Crude Oil Price: West Texas Intermediate (WTI)\n\nWTI Crude Oil Price (Monthly), Source: FRED\nDescription:\nThis dataset contains the monthly spot price of West Texas Intermediate (WTI) crude oil, expressed in U.S. dollars per barrel.\nThe series covers January 1946 to the present (latest data available: 2025) and is maintained by the Federal Reserve Bank of St. Louis (FRED).\nAs a key indicator of energy costs, WTI oil prices strongly influence global shipping and logistics expenses.\nIn this project, the WTI series will be used as an external variable to study how fluctuations in fuel costs impact the Port of Los Angeles container throughput (TEUs)."
   },
   {
     "objectID": "data_source.html#brent-crude-oil-price-mcoilbrenteu",
     "href": "data_source.html#brent-crude-oil-price-mcoilbrenteu",
     "title": "Data Sources",
-    "section": "Brent Crude Oil Price (MCOILBRENTEU)",
-    "text": "Brent Crude Oil Price (MCOILBRENTEU)\nData Source: FRED – Crude Oil Prices: Brent – Europe (MCOILBRENTEU)\n\nBrent Crude Oil Price (Monthly), Source: FRED\nDescription:\nThis dataset contains the monthly spot price of Brent crude oil, expressed in U.S. dollars per barrel.\nThe series covers May 1987 to the present (latest data available: 2025) and is maintained by the Federal Reserve Bank of St. Louis (FRED).\nBrent crude serves as the global benchmark for oil prices, complementing WTI as the U.S. benchmark.\nIn this project, the Brent series will be used to compare with WTI and analyze how global energy price movements influence container throughput at the Port of Los Angeles."
+    "section": "2.2 Brent Crude Oil Price (MCOILBRENTEU)",
+    "text": "2.2 Brent Crude Oil Price (MCOILBRENTEU)\nData Source: FRED – Crude Oil Prices: Brent – Europe (MCOILBRENTEU)\n\nBrent Crude Oil Price (Monthly), Source: FRED\nDescription:\nThis dataset contains the monthly spot price of Brent crude oil, expressed in U.S. dollars per barrel.\nThe series covers May 1987 to the present (latest data available: 2025) and is maintained by the Federal Reserve Bank of St. Louis (FRED).\nBrent crude serves as the global benchmark for oil prices, complementing WTI as the U.S. benchmark.\nIn this project, the Brent series will be used to compare with WTI and analyze how global energy price movements influence container throughput at the Port of Los Angeles."
   },
   {
     "objectID": "data_source.html#u.s.-dollar-index-dtwexbgs",
     "href": "data_source.html#u.s.-dollar-index-dtwexbgs",
     "title": "Data Sources",
-    "section": "U.S. Dollar Index (DTWEXBGS)",
-    "text": "U.S. Dollar Index (DTWEXBGS)\nData Source: FRED – Nominal Broad U.S. Dollar Index (DTWEXBGS)\n\nU.S. Dollar Index (Monthly), Source: FRED\nDescription:\nThis dataset contains the Nominal Broad U.S. Dollar Index, a trade-weighted measure of the value of the U.S. dollar relative to a broad set of foreign currencies.\nThe series covers January 2006 to the present (latest data available: 2025) and is maintained by the Federal Reserve Bank of St. Louis (FRED).\nThe U.S. Dollar Index is a critical financial indicator because it reflects currency strength and influences U.S. trade competitiveness.\nIn this project, the index will be used as an external driver to study how exchange rate fluctuations affect the Port of Los Angeles container throughput (TEUs), especially in terms of imports and exports."
+    "section": "2.3 U.S. Dollar Index (DTWEXBGS)",
+    "text": "2.3 U.S. Dollar Index (DTWEXBGS)\nData Source: FRED – Nominal Broad U.S. Dollar Index (DTWEXBGS)\n\nU.S. Dollar Index (Monthly), Source: FRED\nDescription:\nThis dataset contains the Nominal Broad U.S. Dollar Index, a trade-weighted measure of the value of the U.S. dollar relative to a broad set of foreign currencies.\nThe series covers January 2006 to the present (latest data available: 2025) and is maintained by the Federal Reserve Bank of St. Louis (FRED).\nThe U.S. Dollar Index is a critical financial indicator because it reflects currency strength and influences U.S. trade competitiveness.\nIn this project, the index will be used as an external driver to study how exchange rate fluctuations affect the Port of Los Angeles container throughput (TEUs), especially in terms of imports and exports."
+  },
+  {
+    "objectID": "data_source.html#global-supply-chain-pressure-index-gscpi",
+    "href": "data_source.html#global-supply-chain-pressure-index-gscpi",
+    "title": "Data Sources",
+    "section": "3.1 Global Supply Chain Pressure Index (GSCPI)",
+    "text": "3.1 Global Supply Chain Pressure Index (GSCPI)\nData Source: New York Fed – Global Supply Chain Pressure Index (GSCPI)\nDownload Link: GSCPI Monthly Data (Excel)\n\nGlobal Supply Chain Pressure Index (Monthly), Source: NY Fed\nDescription:\nThe GSCPI is a composite monthly index measuring global supply chain pressure, incorporating factors like sea and air freight costs, delivery times, inventory backlogs, and manufacturing PMI components. It covers January 1997 to present, with recent months updated regularly. A higher index value indicates greater stress in global supply chains.\nIn this project, the GSCPI will be used as an external variable to analyze whether increased supply chain disruptions correspond with changes in container throughput at the Port of Los Angeles."
+  },
+  {
+    "objectID": "data_source.html#covid-19-stringency-index-u.s.-china",
+    "href": "data_source.html#covid-19-stringency-index-u.s.-china",
+    "title": "Data Sources",
+    "section": "3.2 COVID-19 Stringency Index (U.S. & China)",
+    "text": "3.2 COVID-19 Stringency Index (U.S. & China)\nData Source: Oxford COVID-19 Government Response Tracker (OxCGRT)\n\nMonthly average Stringency Index for the United States and China, Source: OxCGRT\nDescription:\nThis dataset provides the COVID-19 Government Response Stringency Index (0–100), compiled by the University of Oxford. The index measures the strictness of government containment policies, including school closures, travel restrictions, stay-at-home requirements, and public information campaigns.\n- United States (USA): Represents demand-side disruptions, reflecting domestic policy restrictions that affected U.S. imports and consumption.\n- China (CHN): Represents supply-side disruptions, reflecting export-side constraints caused by factory shutdowns, port closures, and mobility restrictions.\nThe data are available daily from January 2020 to the present. For this project, they are aggregated to monthly averages to align with the Port of Los Angeles container throughput (TEUs)."
+  },
+  {
+    "objectID": "data_source.html#tariff-weighted-index-advanced-tariff-shock-indicator",
+    "href": "data_source.html#tariff-weighted-index-advanced-tariff-shock-indicator",
+    "title": "Data Sources",
+    "section": "3.3 Tariff-Weighted Index (Advanced Tariff Shock Indicator)",
+    "text": "3.3 Tariff-Weighted Index (Advanced Tariff Shock Indicator)\nData Source: Section 301 Tariff Lists - USTR – Section 301 Tariff Lists (List 1–4 dollar coverage) :contentReferenceoaicite:4\n\nTariff Rates: List 1 & List 2 = 25%; List 3 ≈ 15% (10% → 25% average); List 4 ≈ 15% :contentReferenceoaicite:5\n\n\nCalculation:\n\n\n\nList\nCoverage (USD billions)\nTariff Rate (%)\nWeighted Value\n\n\n\n\n1\n34\n25\n8.5\n\n\n2\n16\n25\n4.0\n\n\n3\n200\n15\n30.0\n\n\n4\n300\n15\n45.0\n\n\n\nCumulative index over time: - 2018-07 → 8.5\n- 2018-08 → 12.5\n- 2018-09 → 42.5\n- 2019-09 → 87.5\nDescription:\nThe Tariff-Weighted Index reflects both the magnitude (dollar value) and intensity (tariff rate) of U.S. Section 301 actions against Chinese imports. This continuous measure provides a nuanced view of policy-induced trade shocks over time, rather than a simple 0/1 indicator."
+  },
+  {
+    "objectID": "data_source.html#sp-500-index-sp500",
+    "href": "data_source.html#sp-500-index-sp500",
+    "title": "Data Sources",
+    "section": "4.1 S&P 500 Index (SP500)",
+    "text": "4.1 S&P 500 Index (SP500)\nData Source: FRED – S&P 500\n\nDaily S&P 500 Index (aggregated to monthly for analysis). Source: FRED\nDescription:\nThis dataset provides the S&P 500 Index, a broad gauge of U.S. equity market performance and risk sentiment.\nDaily data will be aggregated to monthly to align with port TEU frequency."
+  },
+  {
+    "objectID": "data_source.html#dow-jones-transportation-average-djt",
+    "href": "data_source.html#dow-jones-transportation-average-djt",
+    "title": "Data Sources",
+    "section": "4.2 Dow Jones Transportation Average (^DJT)",
+    "text": "4.2 Dow Jones Transportation Average (^DJT)\nData Source: Yahoo Finance – ^DJT\n\nTransportation stocks index (or IYT ETF) as a logistics/transport proxy. Source: Yahoo Finance\nDescription:\nThe Dow Jones Transportation Average (or IYT ETF) tracks transportation-related companies (airlines, rails, trucking).\nIt captures investor expectations for logistics activity and freight demand."
+  },
+  {
+    "objectID": "data_source.html#u.s.-retail-food-services-sales-rsafs",
+    "href": "data_source.html#u.s.-retail-food-services-sales-rsafs",
+    "title": "Data Sources",
+    "section": "4.3 U.S. Retail & Food Services Sales (RSAFS)",
+    "text": "4.3 U.S. Retail & Food Services Sales (RSAFS)\nData Source: FRED – Retail and Food Services Sales (RSAFS)\n\nMonthly U.S. Retail & Food Services Sales (seasonally adjusted). Source: FRED\nDescription:\nMonthly retail spending (seasonally adjusted, billions of dollars).\nIt reflects household demand and import pull-through, especially for consumer goods arriving via West Coast ports."
+  },
+  {
+    "objectID": "data_source.html#ism-manufacturing-pmi-napm",
+    "href": "data_source.html#ism-manufacturing-pmi-napm",
+    "title": "Data Sources",
+    "section": "4.4 ISM Manufacturing PMI (NAPM)",
+    "text": "4.4 ISM Manufacturing PMI (NAPM)\nData Source: FRED – ISM Manufacturing: PMI (NAPM)\n\nMonthly ISM Manufacturing PMI (index, 50 = expansion threshold). Source: FRED\nDescription:\nThe ISM Manufacturing PMI is a diffusion index (0–100) summarizing U.S. factory activity; values &gt;50 indicate expansion.\nIt captures inventory and orders cycles that influence import volumes."
+  },
+  {
+    "objectID": "introduction.html#seasonality-and-forecasting-of-port-throughput",
+    "href": "introduction.html#seasonality-and-forecasting-of-port-throughput",
+    "title": "Introduction",
+    "section": "Seasonality and forecasting of port throughput",
+    "text": "Seasonality and forecasting of port throughput\nExisting research highlights that port and national cargo throughput exhibits strong seasonality, making time series models with seasonal components highly relevant. Munim (2023) compares ARIMA, SARIMA, and other forecasting methods across major Asian ports and shows that incorporating seasonal effects and exogenous variables significantly improves forecast accuracy. Similarly, Morales-Ramírez et al. (2025) apply SARIMA to forecast national port cargo movements and confirm its robustness at the macro level. These studies justify the application of SARIMAX and VAR models in this project, where exogenous drivers and seasonal cycles are central to understanding Port of Los Angeles throughput.",
+    "crumbs": [
+      "Introduction"
+    ]
+  },
+  {
+    "objectID": "introduction.html#energy-costs-and-shipping-market-linkages",
+    "href": "introduction.html#energy-costs-and-shipping-market-linkages",
+    "title": "Introduction",
+    "section": "Energy costs and shipping market linkages",
+    "text": "Energy costs and shipping market linkages\nThe relationship between fuel prices and maritime freight markets is well established. UNCTAD (2010) provides evidence that oil price fluctuations significantly affect container and dry bulk freight rates, underscoring fuel costs as a major determinant of shipping dynamics. More recently, Choi et al. (2020) demonstrate asymmetric and nonlinear dependence between oil prices and freight rates, suggesting that cost shocks transmit unevenly across market conditions. These findings motivate the inclusion of WTI and Brent oil benchmarks as exogenous cost drivers in the time series analysis of port throughput.",
+    "crumbs": [
+      "Introduction"
+    ]
+  },
+  {
+    "objectID": "introduction.html#supply-chain-and-policy-shocks-covid-19-tariffs-and-congestion",
+    "href": "introduction.html#supply-chain-and-policy-shocks-covid-19-tariffs-and-congestion",
+    "title": "Introduction",
+    "section": "Supply chain and policy shocks: COVID-19, tariffs, and congestion",
+    "text": "Supply chain and policy shocks: COVID-19, tariffs, and congestion\nDisruptions such as the COVID-19 pandemic have been shown to reshape both supply and demand channels in maritime trade. Notteboom, Pallis, and Rodrigue (2021) compare the pandemic with the 2008–2009 financial crisis, concluding that COVID-19 caused structural breaks in port operations while also accelerating adaptation and resilience mechanisms. The Global Supply Chain Pressure Index (Benigno et al., 2022) provides a quantitative measure of supply chain stress, widely adopted to capture pandemic-era disruptions. Meanwhile, congestion events at Los Angeles/Long Beach in 2021, where up to 79 containerships were queued offshore (Seatrade Maritime, 2021; Marine Exchange of Southern California, 2021), illustrate operational bottlenecks that can be modeled using event dummies or interrupted time series approaches. Tariff actions under Section 301 also represent critical policy shocks affecting U.S.–China trade. Together, these shocks justify modeling structural breaks and intervention variables in the analysis of port TEUs.",
+    "crumbs": [
+      "Introduction"
+    ]
+  },
+  {
+    "objectID": "introduction.html#financial-demand-channels",
+    "href": "introduction.html#financial-demand-channels",
+    "title": "Introduction",
+    "section": "Financial-demand channels",
+    "text": "Financial-demand channels\nFinally, financial and demand-side indicators are frequently used as leading or coincident variables for trade flows. The S&P 500 and Dow Jones Transportation Average capture investor sentiment and expectations about logistics activity, while U.S. retail sales measure household demand for imported goods. Literature on transportation finance suggests that sector-specific indices serve as forward-looking proxies of logistics conditions. Integrating these indicators into SARIMAX or VAR models enables the study to assess whether financial signals anticipate container throughput movements at the Port of Los Angeles.\nIn summary, prior research on seasonal forecasting, energy linkages, supply chain disruptions, and financial-demand factors provides a solid foundation for this study. By combining these themes, the project addresses key gaps in understanding how macroeconomic drivers, policy shocks, and market sentiment interact to shape U.S.–China trade through the Port of Los Angeles.\nReferences\n\nMunim, Z. H. (2023). Forecasting container throughput of major Asian ports: A comparison of time series methods. Elsevier.\nMorales-Ramírez, D., et al. (2025). Forecasting national port cargo throughput movement using SARIMA. ScienceDirect (in press).\nUNCTAD (2010). Oil Prices and Maritime Freight Rates. Geneva: United Nations Conference on Trade and Development.\nChoi, K.-H., et al. (2020). Asymmetric Dependence between Oil Prices and Maritime Freight Rates. Sustainability, 12(24), 10687.\nNotteboom, T., Pallis, A., & Rodrigue, J.-P. (2021). Disruptions and resilience in global container shipping and ports: The COVID-19 pandemic vs. the 2008–2009 crisis. PortEconomics / PMC.\nBenigno, G., di Giovanni, J., Groen, J. J. J., & Noble, A. (2022). The GSCPI: A New Barometer of Global Supply Chain Pressures. Federal Reserve Bank of New York, Staff Report No. 1017.\nSeatrade Maritime (2021). Record 79 containerships queued at LA/Long Beach ports.\nMarine Exchange of Southern California (2021). Daily and archival reports on vessel queues and scheduling.",
+    "crumbs": [
+      "Introduction"
+    ]
   }
 ]

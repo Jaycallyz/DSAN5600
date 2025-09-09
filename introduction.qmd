@@ -7,6 +7,79 @@ format:
     toc: true
 ---
 # Understanding U.S. West Coast Port Throughput
-The Port of Los Angeles is the largest container port in the United States and a vital gateway for trans-Pacific trade between Asia and North America. As a critical hub in the global supply chain, the port’s monthly container throughput (measured in TEU—twenty-foot equivalent units) reflects not only the health of U.S. trade flows but also broader dynamics in shipping markets, energy costs, currency strength, and policy changes. Fluctuations in throughput affect shipping companies, retailers, manufacturers, and consumers worldwide, making it an important indicator of both logistical capacity and economic resilience.
 
-This project focuses on analyzing the monthly dynamics of container throughput at the Port of Los Angeles. By integrating external drivers such as global freight indices, oil prices, the U.S. dollar index, and major policy events (e.g., COVID-19 disruptions and tariff changes), this study seeks to uncover seasonal cycles, structural breaks, and causal relationships. Through comprehensive time series modeling, the project aims to provide insights into the resilience and vulnerabilities of U.S. maritime trade.
+The Port of Los Angeles is the largest container port in the United States and a key gateway for U.S.–China trade across the Pacific. As a hub in the global supply chain, its monthly container throughput (measured in TEUs) reflects both U.S. trade activity and broader forces shaping global commerce. Changes in throughput affect shipping companies, retailers, manufacturers, and consumers, making it an important indicator of economic resilience.  
+
+This project analyzes the monthly dynamics of Los Angeles port throughput from four perspectives. The first is the structure of trade flows, including loaded imports, loaded exports, and empty containers. The second examines external cost drivers such as oil prices, the U.S. dollar index, and the RMB/USD exchange rate. The third focuses on shocks to the supply chain, including COVID-19, tariff actions, and congestion events. The fourth looks at financial markets and domestic demand through indicators such as the S&P 500, the Dow Jones Transportation Average, and U.S. retail sales.  
+
+By combining these perspectives, the study explores seasonal patterns, structural breaks, and external influences on U.S. maritime trade. The analysis of the Port of Los Angeles highlights both the vulnerabilities and resilience of U.S.–China trade and its role in the global supply chain.
+
+# The Big Picture
+![Big Picture of Port of Los Angeles Analysis](pic/bic-pic.png)  
+<small>*Big Picture: Four analytical perspectives on the Port of Los Angeles monthly container throughput*</small>
+
+The analysis of the Port of Los Angeles throughput is organized into four perspectives:  
+
+1. **Port Throughput Structure** – Loaded Imports, Loaded Exports, Empty Containers, Total TEUs.  
+2. **Energy & Currency Drivers** – WTI Oil Price, Brent Crude Oil Price, U.S. Dollar Index, RMB/USD Exchange Rate.  
+3. **Supply Chain & Policy Shocks** – COVID-19 Pandemic, Section 301 Tariffs, Port Congestion, Global Supply Chain Pressure Index (GSCPI).  
+4. **Financial Markets & Demand** – S&P 500 Index, Dow Jones Transportation Average, U.S. Retail & Food Services Sales.  
+
+This framework highlights both internal and external drivers of container flows, allowing the study to capture seasonal patterns, structural breaks, and policy or market shocks that influence U.S.–China trade and global supply chains.  
+
+# Guiding Questions
+1. How have monthly container throughputs at the Port of Los Angeles evolved over time, and what seasonal patterns can be identified?
+
+2. To what extent do loaded imports, loaded exports, and empty container flows differ in their trends and volatility?
+
+3. How strongly do changes in global oil prices (WTI, Brent) correlate with fluctuations in port throughput, given their impact on shipping costs?
+
+4. How does the U.S. dollar index and the RMB/USD exchange rate affect trade volumes through the Port of Los Angeles?
+
+5. What structural breaks can be observed around major policy shocks, such as Section 301 tariffs or the COVID-19 pandemic?
+
+6. How did COVID-19 disruptions reshape trade flows, and how persistent were their effects on port throughput?
+
+7. How closely do financial market indicators (S&P 500, Dow Jones Transportation Average) track or anticipate movements in port throughput?
+
+8. To what degree do U.S. retail sales serve as a leading indicator of consumer-driven imports arriving at the port?
+
+9. How can multivariate time series models (SARIMAX, VAR) improve forecasts of port throughput compared to univariate approaches?
+
+10. What does the case of the Port of Los Angeles reveal about the resilience of U.S.–China trade and the stability of global supply chains under uncertainty?
+
+# Literature Review
+## Seasonality and forecasting of port throughput
+
+Existing research highlights that port and national cargo throughput exhibits strong seasonality, making time series models with seasonal components highly relevant. Munim (2023) compares ARIMA, SARIMA, and other forecasting methods across major Asian ports and shows that incorporating seasonal effects and exogenous variables significantly improves forecast accuracy. Similarly, Morales-Ramírez et al. (2025) apply SARIMA to forecast national port cargo movements and confirm its robustness at the macro level. These studies justify the application of SARIMAX and VAR models in this project, where exogenous drivers and seasonal cycles are central to understanding Port of Los Angeles throughput.
+
+## Energy costs and shipping market linkages
+
+The relationship between fuel prices and maritime freight markets is well established. UNCTAD (2010) provides evidence that oil price fluctuations significantly affect container and dry bulk freight rates, underscoring fuel costs as a major determinant of shipping dynamics. More recently, Choi et al. (2020) demonstrate asymmetric and nonlinear dependence between oil prices and freight rates, suggesting that cost shocks transmit unevenly across market conditions. These findings motivate the inclusion of WTI and Brent oil benchmarks as exogenous cost drivers in the time series analysis of port throughput.
+
+## Supply chain and policy shocks: COVID-19, tariffs, and congestion
+
+Disruptions such as the COVID-19 pandemic have been shown to reshape both supply and demand channels in maritime trade. Notteboom, Pallis, and Rodrigue (2021) compare the pandemic with the 2008–2009 financial crisis, concluding that COVID-19 caused structural breaks in port operations while also accelerating adaptation and resilience mechanisms. The Global Supply Chain Pressure Index (Benigno et al., 2022) provides a quantitative measure of supply chain stress, widely adopted to capture pandemic-era disruptions. Meanwhile, congestion events at Los Angeles/Long Beach in 2021, where up to 79 containerships were queued offshore (Seatrade Maritime, 2021; Marine Exchange of Southern California, 2021), illustrate operational bottlenecks that can be modeled using event dummies or interrupted time series approaches. Tariff actions under Section 301 also represent critical policy shocks affecting U.S.–China trade. Together, these shocks justify modeling structural breaks and intervention variables in the analysis of port TEUs.
+
+## Financial-demand channels
+Finally, financial and demand-side indicators are frequently used as leading or coincident variables for trade flows. The S&P 500 and Dow Jones Transportation Average capture investor sentiment and expectations about logistics activity, while U.S. retail sales measure household demand for imported goods. Literature on transportation finance suggests that sector-specific indices serve as forward-looking proxies of logistics conditions. Integrating these indicators into SARIMAX or VAR models enables the study to assess whether financial signals anticipate container throughput movements at the Port of Los Angeles.
+
+In summary, prior research on seasonal forecasting, energy linkages, supply chain disruptions, and financial-demand factors provides a solid foundation for this study. By combining these themes, the project addresses key gaps in understanding how macroeconomic drivers, policy shocks, and market sentiment interact to shape U.S.–China trade through the Port of Los Angeles.
+
+**References**
+
+- Munim, Z. H. (2023). Forecasting container throughput of major Asian ports: A comparison of time series methods. Elsevier.
+
+- Morales-Ramírez, D., et al. (2025). Forecasting national port cargo throughput movement using SARIMA. ScienceDirect (in press).
+
+- UNCTAD (2010). Oil Prices and Maritime Freight Rates. Geneva: United Nations Conference on Trade and Development.
+
+- Choi, K.-H., et al. (2020). Asymmetric Dependence between Oil Prices and Maritime Freight Rates. Sustainability, 12(24), 10687.
+
+- Notteboom, T., Pallis, A., & Rodrigue, J.-P. (2021). Disruptions and resilience in global container shipping and ports: The COVID-19 pandemic vs. the 2008–2009 crisis. PortEconomics / PMC.
+
+- Benigno, G., di Giovanni, J., Groen, J. J. J., & Noble, A. (2022). The GSCPI: A New Barometer of Global Supply Chain Pressures. Federal Reserve Bank of New York, Staff Report No. 1017.
+
+- Seatrade Maritime (2021). Record 79 containerships queued at LA/Long Beach ports.
+
+- Marine Exchange of Southern California (2021). Daily and archival reports on vessel queues and scheduling.
