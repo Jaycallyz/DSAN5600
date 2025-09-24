@@ -1,8 +1,247 @@
 ---
 title: "Exploratory Data Analysis"
-date: "2025-08-30"
+date: "2025-09-22"
 format:
   html:
     embed-resources: true
     toc: true
+execute:
+  warning: false
+  message: false
 ---
+
+```{r}
+# read the data
+library(readr)
+library(dplyr)
+library(zoo)
+
+
+la_teu_data <- read_csv("data-raw/la_teu_data.csv", show_col_types = FALSE)
+
+la_teu_data <- la_teu_data %>%
+  filter(grepl("^[A-Za-z]{3}-\\d{2}$", Date))
+
+
+la_teu_data <- la_teu_data %>%
+  mutate(
+    ym   = as.yearmon(Date, "%b-%y"),
+    date = as.Date(ym)
+  )
+
+
+num_cols <- c("Loaded_Imports","Empty_Imports","Total_Imports",
+              "Loaded_Exports","Empty_Exports","Total_Exports","Total_TEUs")
+num_cols <- intersect(num_cols, names(la_teu_data))
+
+la_teu_data <- la_teu_data %>%
+  mutate(across(all_of(num_cols), ~ readr::parse_number(as.character(.))))
+
+la_teu_data <- la_teu_data %>%
+  arrange(date) %>%
+  distinct(date, .keep_all = TRUE) %>%
+  filter(!is.na(Total_TEUs))
+
+
+full_months <- tibble(date = seq(min(la_teu_data$date), max(la_teu_data$date), by = "month"))
+la_teu_full  <- full_months %>% left_join(la_teu_data, by = "date")
+
+# convert to the ts mode
+start_year  <- as.integer(format(min(la_teu_full$date), "%Y"))
+start_month <- as.integer(format(min(la_teu_full$date), "%m"))
+la_teu_ts <- ts(la_teu_full$Total_TEUs, start = c(start_year, start_month), frequency = 12)
+
+teu_m <- window(la_teu_ts, start = c(2000, 1), end = c(2024, 12))
+
+teu_q <- aggregate(teu_m, nfrequency = 4, FUN = sum)   # Quarterly total TEUs
+teu_y <- aggregate(teu_m, nfrequency = 1, FUN = sum)   # Yearly total TEU
+
+print(range(la_teu_full$date))
+```
+
+
+# 1. Time Series Plot
+```{r}
+plot(teu_m,
+     main = "Port of LA Monthly Container Throughput",
+     xlab = "Year",
+     ylab = "Total TEUs",
+     yaxt = "n")  
+axis(2, at = pretty(teu_m), labels = format(pretty(teu_m), big.mark = ","))
+```
+**Why Apply Log Transformation**
+
+The original monthly container throughput data for the Port of Los Angeles exhibits clear evidence of heteroscedasticity — the variance of fluctuations increases as the overall throughput level rises. This pattern is common in economic and trade-related time series where growth in scale is accompanied by greater volatility. 
+
+Such behavior can create two main issues：
+(1) statistical models such as ARIMA assume relatively stable variance, which is violated here
+(2) larger fluctuations in recent years dominate the series, making model fitting less reliable.
+
+To address these concerns, a log transformation is applied. This transformation compresses the scale of large values, stabilizes the variance, and highlights relative changes rather than absolute ones, thereby making the data more suitable for time series modeling.
+
+
+```{r}
+library(tidyr)
+library(ggplot2)
+win_start <- as.Date("2000-01-01")
+win_end   <- as.Date("2024-12-01")
+
+la_teu_win <- la_teu_full %>%
+  filter(date >= win_start, date <= win_end) %>%
+  mutate(
+    TEUs = as.numeric(Total_TEUs),
+    log_TEUs = ifelse(TEUs > 0, log(TEUs), NA_real_)
+  )
+
+teu_df <- la_teu_win %>%
+  select(Date = date, TEUs, log_TEUs)
+
+plot_df <- teu_df |>
+  mutate(`Original TEUs` = TEUs, `log(TEUs+1)` = log(TEUs + 1)) |>
+  select(Date, `Original TEUs`, `log(TEUs+1)`) |>
+  pivot_longer(-Date, names_to = "Series", values_to = "Value")
+
+ggplot(plot_df, aes(Date, Value)) +
+  geom_line() +
+  facet_wrap(~ Series, ncol = 1, scales = "free_y") +
+  labs(title = "Original vs Log-Transformed TEUs (2000–2024)",
+       x = "Year", y = "Value") +
+  theme_minimal(base_size = 12)+
+  theme(legend.position = "right")
+
+```
+**Interpretation of the Transformed Data**
+
+The comparison between the original series (bottom panel) and the log-transformed series (top panel) illustrates the benefits of this adjustment.
+
+- Original TEUs (bottom panel): The series shows a long-term upward trend from 2000 to 2024, with major disruptions around 2020 due to the COVID-19 pandemic. Volatility increases over time, and recent years display sharper swings in throughput levels.
+
+- Log-Transformed TEUs (top panel): After transformation, the variance becomes more stable across time, with fluctuations compressed and appearing more uniform. The long-term growth trend remains evident, but extreme variations—especially during 2020—are moderated. This stabilization enhances the reliability of subsequent statistical modeling and allows for clearer identification of underlying patterns.
+
+# 2. Lag plot
+```{r}
+library(forecast)
+library(ggplot2)
+library(scales)
+
+gglagplot(teu_m, lags = 9, do.lines = FALSE) +
+  labs(title = "Lag Plots (1–9) — TEUs (2000–2024)",
+       x = "Lagged TEUs", y = "Current TEUs") +
+  scale_y_continuous(labels = label_number(scale = 1e-6, suffix = "M")) +
+  scale_x_continuous(labels = label_number(scale = 1e-6, suffix = "M")) +
+  theme_minimal(base_size = 12) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),  
+    axis.text.y = element_text(angle = 0, hjust = 1)    
+  )
+
+```
+The figure above presents the lag plots (lags 1–9) of monthly container throughput at the Port of Los Angeles (2000–2024). Most of the points are clustered around the diagonal line, indicating strong autocorrelation between the current values and their lagged counterparts. This suggests that the throughput series exhibits persistence and momentum over time. As the lag order increases, the points become more dispersed and the correlation weakens, although a general pattern is still visible. Overall, these plots confirm the presence of temporal dependence in the data, providing justification for applying time series models such as ARIMA.
+
+# 3. Decomposition
+```{r}
+library(forecast)
+library(ggplot2)
+
+teu_log <- log(teu_m)
+
+# decompose log(TEUs)
+autoplot(decompose(teu_log)) +
+  ggtitle("Decomposition of Log-Transformed Port of LA Monthly TEUs (2000–2024)") +
+  xlab("Year") +
+  ylab("Value")
+```
+- Trend shows a long-term upward movement, with significant downturns around the 2008 financial crisis and the 2020 COVID-19 shock.
+- Seasonal clearly reveals strong monthly seasonality patterns.
+- Remainder is relatively small most of the time, but shows large negative spikes in 2020, capturing the extraordinary disruptions.
+
+# 4. ACF and PACF Plots
+```{r}
+library(forecast)
+library(ggplot2)
+# use log data
+teu_log <- log(teu_m)
+
+# ACF
+ggAcf(teu_log) +
+  ggtitle("ACF of Log(TEUs)") +
+  theme_minimal()
+
+# PACF
+ggPacf(teu_log) +
+  ggtitle("PACF of Log(TEUs)") +
+  theme_minimal()
+
+```
+- The ACF decays slowly with significant values at multiple lags and clear seasonal spikes around lag 12, indicating trend and seasonality—the series is not weakly stationary yet.
+
+- The PACF shows prominent spikes at low lags (≈1–3) that taper off, suggesting low-order AR effects; seasonal behavior is visible as well.
+
+# 5. Augmented Dickey-Fuller Test
+```{r}
+library(urca)
+
+tseries::adf.test(teu_log)
+
+```
+Based on the ADF test, the log-transformed TEUs series rejects the unit root hypothesis at the 1% significance level, indicating that it can be considered stationary.
+However, the ACF and PACF plots still exhibit strong autocorrelation and clear seasonal spikes.
+
+This suggests that, while the series is broadly stationary, applying first-order differencing or seasonal differencing (lag = 12) during the modeling stage may still be beneficial to improve model performance.
+
+# 6. Differencing
+```{r}
+library(forecast)
+library(ggplot2)
+library(gridExtra)
+
+teu_log <- log(teu_m)
+teu_diff1 <- diff(teu_log, differences = 1)
+
+p1 <- autoplot(teu_log) + ggtitle("Log(TEUs)")
+p2 <- autoplot(teu_diff1) + ggtitle("1st Difference of Log(TEUs)")
+
+grid.arrange(p1, p2, ncol=1)
+```
+
+The original log-transformed series still shows a clear upward trend, which violates the assumption of stationarity.After applying the first difference, the trend is largely removed, and the series fluctuates around zero.
+
+This makes the differenced series more suitable for time series modeling, as stationarity is a key assumption.
+
+```{r}
+# 1st difference of ACF
+acf_plot <- ggAcf(teu_diff1, lag.max = 36) +
+  ggtitle("ACF of 1st Difference of Log(TEUs)") +
+  theme_minimal()
+
+# 1st difference of PACF
+pacf_plot <- ggPacf(teu_diff1, lag.max = 36) +
+  ggtitle("PACF of 1st Difference of Log(TEUs)") +
+  theme_minimal()
+
+grid.arrange(acf_plot, pacf_plot, ncol = 2)
+tseries::adf.test(teu_diff1)
+
+```
+
+# 7. Moving Average
+```{r}
+library(forecast)
+library(ggplot2)
+
+autoplot(teu_log) +
+  autolayer(ma(teu_log, 3),  series = "MA-3 (Quarterly)") +   # quarter smooth
+  autolayer(ma(teu_log, 12), series = "MA-12 (Annual)") +     # annual smooth
+  autolayer(ma(teu_log, 24), series = "MA-24 (2-Year)") +     # 2 year smooth
+  labs(
+    title = "Moving Average Smoothing — log(TEUs)",
+    x = "Time", y = "log(TEUs)"
+  ) +
+  theme_minimal() +
+  guides(colour = guide_legend(title = "Series"))
+```
+Overall, while the series shows strong seasonality and shocks (e.g., the dip during 2020 due to the pandemic), the long-term upward trend remains evident.
+
+
+
+
