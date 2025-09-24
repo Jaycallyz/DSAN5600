@@ -5,4 +5,307 @@ format:
   html:
     embed-resources: true
     toc: true
+    code-fold: true 
+execute:
+  warning: false
+  message: false
 ---
+# 1. TEUs timeline with events
+```{r}
+# ---- packages ----
+library(tidyverse)
+library(zoo)
+library(scales)
+
+# read and clean
+la_teu_data <- read_csv("data-raw/la_teu_data.csv", show_col_types = FALSE) %>%
+  mutate(
+    ym   = zoo::as.yearmon(Date, "%b-%y"),
+    Date = as.Date(ym),
+    Total_TEUs = readr::parse_number(Total_TEUs)
+  ) %>%
+  filter(!is.na(Date), !is.na(Total_TEUs)) %>%
+  arrange(Date)
+
+la_teu_data <- la_teu_data %>%
+  mutate(MA12 = zoo::rollmean(Total_TEUs, k = 12, align = "right", fill = NA))
+
+# ---- color ----
+col_teus <- "#3BC5B5"  # Monthly TEUs
+col_ma   <- "#CD7B2E"  # 12-month MA
+
+# ---- plot ----
+ggplot(la_teu_data, aes(x = Date)) +
+  geom_line(aes(y = Total_TEUs, color = "Monthly TEUs"), linewidth = 0.6) +
+  geom_line(aes(y = MA12, color = "12-month MA"), linewidth = 1.2) +
+  scale_color_manual(values = c("Monthly TEUs" = col_teus,
+                                "12-month MA" = col_ma)) +
+  scale_y_continuous(labels = label_number(scale_cut = cut_short_scale())) +
+  labs(
+    title    = "Port of Los Angeles — Monthly Container Throughput (TEUs)",
+    subtitle = "With 12-month moving average",
+    x = "Year", y = "TEUs", color = NULL
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    legend.position = "right",  
+    legend.text = element_text(size = 12),
+    plot.title = element_text(face = "bold", size = 14),
+    panel.grid.minor = element_blank()
+  )
+
+```
+
+The chart shows the monthly container throughput (TEUs) at the Port of Los Angeles from 1995 to 2024, along with a 12-month moving average to highlight long-term patterns. The raw monthly series (teal) captures short-term fluctuations, while the smoothed trend (orange) emphasizes broader cycles in trade volume. The data reveal steady growth from the late 1990s through the mid-2000s, a sharp decline during the 2008 global financial crisis, and renewed expansion in the 2010s. More recently, the series reflects disruptions associated with the COVID-19 pandemic and subsequent recovery, followed by signs of stabilization. Overall, the long-term moving average indicates that despite cyclical downturns, container volumes have trended upward, underscoring the port’s critical role in global trade.
+
+# 2. Seasonality Patterns of TEUs
+```{r}
+library(tidyverse)
+library(zoo)
+library(scales)
+
+la_teu_data <- read_csv("data-raw/la_teu_data.csv", show_col_types = FALSE) %>%
+  mutate(
+    ym        = zoo::as.yearmon(Date, "%b-%y"),
+    Date      = as.Date(ym),
+    Total_TEUs = readr::parse_number(Total_TEUs)
+  ) %>%
+  filter(!is.na(Date), !is.na(Total_TEUs)) %>%
+  arrange(Date)
+
+plot_df <- la_teu_data %>%
+  transmute(
+    Year  = lubridate::year(Date),
+    Month = factor(lubridate::month(Date, label = TRUE, abbr = TRUE),
+                   levels = month.abb, ordered = TRUE),
+    TEUs  = Total_TEUs
+  ) %>%
+  drop_na()
+
+plot_df <- plot_df %>%
+  group_by(Month) %>%
+  mutate(TEUs_z = as.numeric(scale(TEUs))) %>%
+  ungroup()
+
+# --- Cube Palette---
+col_cube <- c("#2ebeb1","#d8bfd8","#ff9af6")
+
+ggplot(plot_df, aes(x = Month, y = Year, fill = TEUs)) +
+  geom_tile(color = "white") +
+  scale_fill_gradientn(
+    colours = col_cube,
+    labels = label_number(scale_cut = cut_short_scale()),
+    name = "TEUs"
+  ) +
+  labs(
+    title = "Seasonality Heatmap — Port of LA Monthly TEUs",
+    subtitle = "Brighter pink = higher throughput; lighter purple = lower throughput",
+    x = NULL, y = NULL
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    panel.grid = element_blank(),
+    axis.text.x = element_text(size = 11),
+    axis.text.y = element_text(size = 10),
+    legend.position = "right"
+  )
+
+```
+The heatmap illustrates the seasonal patterns of container throughput (TEUs) at the Port of Los Angeles across months and years. Brighter pink areas represent higher throughput, while lighter purple tones indicate lower activity. The chart shows that container volumes generally increased over the long term, with stronger activity in recent decades compared to earlier years. Seasonal peaks are visible in the late summer and fall months, reflecting heightened shipping demand ahead of the holiday season. The sharp drop in 2020 highlights the disruption caused by the COVID-19 pandemic, followed by a quick rebound, underscoring how global events directly affect port activity.
+
+# 3. Imports, Exports, and Empties — Drivers of Growth
+```{r}
+# --- packages ---
+library(tidyverse)
+library(zoo)
+library(scales)
+
+num_cols <- c(
+  "Total_TEUs","Loaded_Imports","Empty_Imports","Total_Imports",
+  "Loaded_Exports","Empty_Exports","Total_Exports"
+)
+
+la_teu_data <- read_csv("data-raw/la_teu_data.csv", show_col_types = FALSE) %>%
+  mutate(across(any_of(num_cols),
+                ~ if (is.numeric(.x)) .x else readr::parse_number(.x))) %>%
+  mutate(
+    ym   = zoo::as.yearmon(Date, "%b-%y"),
+    Date = as.Date(ym)
+  ) %>%
+  filter(!is.na(Date), !is.na(Total_TEUs)) %>%
+  arrange(Date)
+
+# --- Cube Palette ---
+pal <- c(
+  "Imports" = "#D20E88",     
+  "Exports" = "#8E7897",     
+  "Empties" = "#D8BFD8"      
+)
+
+# --- empties, imports, exports ---
+plot_data <- la_teu_data %>%
+  transmute(
+    Date,
+    Imports = Total_Imports,
+    Exports = Total_Exports,
+    Empties = Empty_Imports + Empty_Exports
+  ) %>%
+  pivot_longer(-Date, names_to = "Flow", values_to = "TEUs") %>%
+  drop_na(TEUs)
+
+plot_abs <- ggplot(plot_data, aes(Date, TEUs, fill = Flow)) +
+  geom_area(size = 0.1, color = "white", alpha = 0.98) +
+  scale_fill_manual(values = pal, name = NULL) +
+  scale_y_continuous(
+    labels = label_number(scale_cut = cut_short_scale()),
+    limits = c(0, 1.5e6)  
+  ) +
+  labs(
+    title = "Port of LA — Imports vs Exports (with Empties)",
+    subtitle = "Stacked monthly TEUs show which side drives growth over time",
+    x = NULL, y = "TEUs"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    panel.grid.minor = element_blank(),
+    legend.position = "right"
+  )
+
+print(plot_abs)
+
+
+```
+The stacked area chart illustrates the evolution of imports, exports, and empty containers at the Port of Los Angeles over time. Overall TEU volumes have grown substantially since the mid-1990s, with imports accounting for the largest share of growth. Exports, while present, remain comparatively stable and contribute less to the overall increase. Empty containers also represent a notable component, highlighting imbalances in trade flows and the logistics challenges of repositioning containers. This visualization emphasizes that the surge in port activity has been largely driven by rising imports, reflecting U.S. consumer demand and the growing role of Asia–U.S. trade.
+
+# 4. TEUs and External Variables — Interactive Relationships
+```{r}
+library(plotly)
+library(readr)
+library(dplyr)
+library(tidyverse)
+library(zoo)
+library(lubridate)
+
+teu <- read_csv("data-raw/la_teu_data.csv", show_col_types = FALSE) %>%
+  mutate(
+    ym   = zoo::as.yearmon(Date, "%b-%y"), 
+    Date = as.Date(ym)                     
+  ) %>%
+  select(Date, TEUs = Total_TEUs)
+
+wti <- read_csv("data-raw/WTI.csv", show_col_types = FALSE) %>%
+  rename(Date = observation_date, WTI = WTISPLC)
+
+brent <- read_csv("data-raw/brent.csv", show_col_types = FALSE) %>%
+  rename(Date = observation_date, Brent = MCOILBRENTEU)
+
+usd <- read_csv("data-raw/usd.csv", show_col_types = FALSE) %>%
+  rename(Date = observation_date, USD = DTWEXBGS)
+
+rsa <- read_csv("data-raw/RSAFS.csv", show_col_types = FALSE) %>%
+  rename(Date = observation_date, RSAFS = RSAFS)
+
+sp500 <- read_csv("data-raw/SP500.csv", show_col_types = FALSE) %>%
+  rename(Date = observation_date, SP500 = SP500)
+
+rmb <- read_csv("data-raw/rmb.csv", show_col_types = FALSE) %>%
+  rename(Date = observation_date, RMB = DEXCHUS)
+
+
+df <- teu %>%
+  left_join(wti,   by = "Date") %>%
+  left_join(brent, by = "Date") %>%
+  left_join(usd,   by = "Date") %>%
+  left_join(rsa,   by = "Date") %>%
+  left_join(sp500, by = "Date") %>%
+  left_join(rmb,   by = "Date")
+
+# handle na
+df <- df %>%
+  mutate(
+    WTI   = zoo::na.locf(WTI,   na.rm = FALSE),
+    Brent = zoo::na.locf(Brent, na.rm = FALSE),
+    USD   = zoo::na.locf(USD,   na.rm = FALSE),
+    RSAFS = zoo::na.locf(RSAFS, na.rm = FALSE),
+    SP500 = zoo::na.locf(SP500, na.rm = FALSE),
+    RMB   = zoo::na.locf(RMB,   na.rm = FALSE)
+  ) %>%
+  filter(Date >= as.Date("2000-01-01"), Date <= as.Date("2024-01-01"))
+
+
+p <- plot_ly(df, x = ~Date) %>%
+  add_lines(y = ~TEUs, name = "TEUs", yaxis = "y1",
+            line = list(color = '#3b80c5', width = 2)) %>%
+  add_lines(y = ~WTI,  name = "WTI",  yaxis = "y2",
+            line = list(color = '#a2acbd', width = 1.5)) %>%
+  layout(
+    title  = "Port of LA TEUs vs External Drivers",
+    xaxis  = list(
+      title = "Date",
+      automargin = TRUE,
+      rangeslider = list(visible = FALSE),  
+      fixedrange  = FALSE
+    ),
+    yaxis  = list(
+      title = "TEUs",
+      rangemode = "tozero",
+      automargin = TRUE,
+      nticks = 6,
+      tickformat = ",.0f"
+    ),
+    yaxis2 = list(
+      overlaying = "y",
+      side       = "right",
+      automargin = TRUE,
+      nticks     = 6,
+      tickformat = ",.0f",
+      title      = list(text = "External Variable", standoff = 50)
+    ),
+    legend = list(orientation = "h", x = 0.5, y = 1.12, xanchor = "center"),
+    margin = list(l = 90, r = 150, t = 70, b = 60),
+    hovermode = "x unified",
+    autosize  = TRUE
+  ) %>%
+  config(responsive = TRUE, scrollZoom = TRUE, displaylogo = FALSE) %>%
+  layout(
+    updatemenus = list(
+      list(
+        type = "dropdown",
+        x = 0.06, y = 1.16,
+        buttons = list(
+          list(method = "restyle",
+               args = list(list(y = list(df$WTI),   name = "WTI"),        list(1)),
+               label = "WTI"),
+          list(method = "restyle",
+               args = list(list(y = list(df$Brent), name = "Brent"),      list(1)),
+               label = "Brent"),
+          list(method = "restyle",
+               args = list(list(y = list(df$USD),   name = "USD Index"),  list(1)),
+               label = "USD Index"),
+          list(method = "restyle",
+               args = list(list(y = list(df$RMB),   name = "RMB/USD"),    list(1)),
+               label = "RMB/USD"),
+          list(method = "restyle",
+               args = list(list(y = list(df$RSAFS), name = "Retail Sales"), list(1)),
+               label = "Retail Sales"),
+          list(method = "restyle",
+               args = list(list(y = list(df$SP500), name = "S&P 500"),    list(1)),
+               label = "S&P 500")
+        )
+      )
+    )
+  )
+
+p
+```
+
+- **WTI Oil Price vs TEUs**: TEUs tend to fall when WTI prices surge, showing the impact of fuel costs on shipping activity.
+- **Brent Oil Price vs TEUs**: Similar to WTI, Brent prices show a negative relationship with TEUs, but the effect appears less direct after 2015.
+- **USD Index vs TEUs**: A stronger USD often corresponds with lower TEUs, suggesting a strong dollar reduces U.S. import demand.
+- **RMB/USD Exchange Rate vs TEUs**: TEUs increase when RMB weakens (higher CNY per USD), supporting the idea that cheaper Chinese exports drive more U.S. imports.
+- **Retail Sales vs TEUs**: U.S. retail sales move in line with TEUs, highlighting how consumer demand directly pulls imports.
+- **S&P 500 vs TEUs**: TEUs generally rise with the S&P 500, reflecting that economic optimism and stock market strength support trade volume.
+
+
+
+
