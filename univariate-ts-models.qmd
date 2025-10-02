@@ -1,8 +1,344 @@
 ---
 title: "Univariate TS Models (ARIMA/SARIMA)s"
-date: "2025-08-30"
+date: "2025-10-02"
 format:
   html:
     embed-resources: true
     toc: true
+    code-fold: true 
+execute:
+  warning: false
+  message: false
 ---
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(forecast)
+library(astsa) 
+library(xts)
+library(tseries)
+library(fpp2)
+library(fma)
+library(lubridate)
+library(tidyverse)
+library(TSstudio)
+library(quantmod)
+library(tidyquant)
+library(plotly)
+library(ggplot2)
+library(dplyr)
+library(seasonal)
+library(patchwork)
+```
+
+```{r}
+la_teu_data <- read_csv("data-raw/la_teu_data.csv", show_col_types = FALSE)
+head(la_teu_data)
+```
+
+# For Total TEUs
+```{r}
+df <- la_teu_data %>%
+  transmute(
+    Date = coalesce(suppressWarnings(my(Date)),    
+                    suppressWarnings(ymd(Date))), 
+    Total_TEUs = parse_number(Total_TEUs)          
+  ) %>%
+  arrange(Date) %>%
+  filter(!is.na(Date), !is.na(Total_TEUs))
+
+win_start <- ymd("2000-01-01")
+win_end   <- ymd("2024-12-01")
+
+df_teu <- df %>%
+  filter(Date >= win_start, Date <= win_end) %>%
+  mutate(
+    TEUs = Total_TEUs,
+    log_TEUs = log(Total_TEUs + 1)
+  ) %>%
+  select(Date, TEUs, log_TEUs)
+
+head(df_teu)
+```
+
+
+```{r}
+###### Plot Original Data using Plotly ######
+plot_ly(df_teu, x = ~as.Date(Date), y = ~TEUs, type = 'scatter', mode = 'lines',
+        line = list(color = '#ffa988')) %>%
+  layout(title = "Orignial Time Series of Port of Los Angeles Container Throughput (TEUs) ",
+         xaxis = list(title = "Date"),
+         yaxis = list(title = "TEUs"))
+```
+
+The time series of container throughput (TEUs) at the Port of Los Angeles from 2000 to 2024 shows an overall upward trend with pronounced cyclical fluctuations, reflecting both long-term trade growth and sensitivity to global shocks. Throughput expanded steadily in the early 2000s before declining sharply during the 2008 financial crisis, after which it recovered and stabilized within a broad seasonal cycle. Beginning in 2020, the series exhibits extreme volatility: a sharp contraction during the onset of the COVID-19 pandemic was followed by record peaks in 2021 as consumer demand surged and supply chain congestion intensified. In recent years, volumes have moderated but remain elevated, underscoring both the vulnerability of the port to external disruptions and its resilience as a central hub in U.S.–China trade and global supply chains.
+
+
+```{r}
+ts_df <- ts(df_teu$TEUs, 
+              start = decimal_date(as.Date(min(df$Date))), 
+              frequency = 12)  # Assuming monthly data
+ts_log <- ts(df_teu$log_TEUs, 
+              start = decimal_date(as.Date(min(df$Date))), 
+              frequency = 12)  # Assuming monthly data
+plot(ts_df, main = "Time Series plot for orignial data")
+plot(ts_log, main = "Time Series plot for log data")
+```
+The log transformation does not yield a significant improvement in residual behavior, while complicating forecast back-transformation. Therefore, we retain the original scale of the data for analysis and forecasting.
+
+## ACF with original data
+```{r}
+# ACF Plot
+ggAcf(ts_log) +
+  ggtitle("ACF Plot of Port of Los Angeles Container Throughput") +
+  theme_minimal()
+```
+## ADF test
+```{r}
+################ ADF Test #############
+tseries::adf.test(ts_log)
+```
+The ACF plot of the original series shows a slow decay in autocorrelations across multiple lags, indicating strong persistence and nonstationarity. In addition, the AD F test yields a p-value of 0.01, which is below the 0.05 significance threshold, rejecting the null hypothesis of a unit root. 
+
+Taken together, these results confirm that the raw TEUs series of the Port of Los Angeles is non-stationary.
+
+
+```{r}
+diff_1 <- diff(ts_df)
+diff_2 <- diff(ts_df,differences = 2)
+
+# ACF Plots for seasonal without normal differenced Data
+acf_plot1 <- ggAcf(diff_1, 40) +
+  labs(title = "ACF of first differenced TEUs") 
+acf_plot2 <- ggAcf(diff_2, 40) +
+  labs(title = "ACF of second differenced TEUs") 
+
+# Combine ACF Plots using patchwork
+acf_plot1 / acf_plot2
+```
+The ACF plot of the first-differenced series shows that autocorrelations drop sharply after lag 1 and remain largely within the confidence bounds, indicating that first differencing has effectively removed the nonstationarity of the original TEUs series. In contrast, the second-differenced series does not provide additional improvement and may risk overdifferencing, which can distort the underlying structure of the data. 
+
+Therefore, a first-order difference is sufficient。
+
+```{r}
+diff_s <-diff(diff_1,12)
+
+# ACF Plots for Differenced Data
+acf_plot1 <- ggAcf(diff_1, 40) +
+  labs(title = "ACF of first differenced TEUs") 
+pacf_plot1 <- ggPacf(diff_1, 40) +
+  labs(title = "PACF of first differenced TEUs")  
+
+acf_plots <- ggAcf(diff_s, 40) +
+  labs(title = "ACF of first differenced seasonal TEUs") 
+pacf_plots <- ggPacf(diff_s, 40) +
+  labs(title = "PACF of first differenced seasonal TEUs") 
+
+# Combine ACF Plots using patchwork
+acf_plot1 / pacf_plot1
+acf_plots / pacf_plots
+```
+q=0:1,Q=1:3,p=1:4,P=1,d=1,D=1
+
+```{r}
+SARIMA.c <- function(p1, p2, q1, q2, P1, P2, Q1, Q2, data) {
+  d <- 1; D <- 1
+  if (!is.ts(data)) data <- ts(data, frequency = 12)
+  s <- frequency(data); if (is.null(s) || is.na(s) || s <= 1) s <- 12
+  
+  rows <- list()
+  
+  i <- 1
+  for (p in p1:p2) {
+    for (q in q1:q2) {
+      for (P in P1:P2) {
+        for (Q in Q1:Q2) {
+          
+          if (p + d + q + P + D + Q <= 9) {
+            model <- tryCatch(
+              Arima(
+                data,
+                order    = c(p, d, q),
+                seasonal = list(order = c(P, D, Q), period = s)
+              ),
+              error = function(e) NULL
+            )
+            
+            if (!is.null(model)) {
+              rows[[i]] <- c(p, d, q, P, D, Q, model$aic, model$bic, model$aicc)
+              i <- i + 1
+            }
+          }
+        }
+      }
+    }
+  }
+  
+  if (length(rows) == 0) {
+    out <- setNames(
+      as.data.frame(matrix(numeric(0), nrow = 0, ncol = 9)),
+      c("p","d","q","P","D","Q","AIC","BIC","AICc")
+    )
+    return(out)
+  }
+  
+  out <- as.data.frame(do.call(rbind, rows))
+  names(out) <- c("p","d","q","P","D","Q","AIC","BIC","AICc")
+  for (nm in names(out)) out[[nm]] <- as.numeric(out[[nm]])
+  rownames(out) <- NULL
+  
+  out
+}
+```
+
+```{r}
+output <- SARIMA.c(
+  p1=1, p2=4,
+  q1=0, q2=1,
+  P1=0, P2=1,
+  Q1=1, Q2=3,
+  data = ts_df
+)
+
+output[which.min(output$AIC), , drop=FALSE]
+output[which.min(output$BIC), , drop=FALSE]
+output[which.min(output$AICc), , drop=FALSE]
+```
+SARIMA(4,1,1)(0,1,1)[12]/(1,1,1)(0,1,1)[12] is best model for manual search.
+
+```{r}
+auto.arima(ts_df)
+```
+SARIMA(0,1,4)(0,0,2)[12] is best model for auto search.
+
+```{r}
+# Set seed for reproducibility
+set.seed(345)
+
+###### Fit SARIMA(1,1,1)(1,1,1)[12] Model ######
+model_1_output <- capture.output(sarima(ts_df, 4, 1, 1, 0, 1, 1, 12))
+model_2_output <- capture.output(sarima(ts_df, 1, 1, 1, 0, 1, 1, 12))
+model_3_output <- capture.output(sarima(ts_df, 0, 1, 4, 0, 0, 2, 12))
+
+###### Extract and Print Relevant Output ######
+extract_model_output <- function(model_output, model_name) {
+  start_line <- grep("Coefficients", model_output)  # Locate coefficient section
+  end_line <- length(model_output)  # Capture entire output
+  cat("\n###", model_name, "###\n")
+  cat(model_output[start_line:end_line], sep = "\n")  # Print relevant details
+}
+
+###### Print Model Outputs ######
+extract_model_output(model_1_output, "SARIMA(4,1,1)(0,1,1)[12]")
+extract_model_output(model_2_output, "SARIMA(1,1,1)(0,1,1)[12]")
+extract_model_output(model_3_output, "SARIMA(0,1,4)(0,0,2)[12]")
+```
+**Among the three candidate models, SARIMA(1,1,1)(0,1,1)[12] is selected as the most appropriate.**
+
+Although the (4,1,1)(0,1,1)[12] specification yields a slightly lower AIC, several of its AR coefficients are statistically insignificant, suggesting potential overfitting and reduced interpretability. Similarly, the (0,1,4)(0,0,2)[12] model captures short-term dynamics but fails to incorporate seasonal differencing (D=1), which is inconsistent with the pronounced seasonality of the TEUs series. In contrast, the (1,1,1)(0,1,1)[12] model achieves a favorable balance, with competitive AIC/BIC values, statistically significant parameters, and a parsimonious structure that adequately reflects both the underlying trend and seasonal dependence. Therefore, it represents the most robust and reliable choice among the three models.
+
+```{r}
+###### Fit ARIMA(1,0,2)(0,1,1)[12] Model ######
+fit <- Arima(ts_df, order = c(1, 1, 1), seasonal =list( order=c(0, 1, 1), period=12))
+
+###### Display Model Summary ######
+summary(fit)
+```
+```{r}
+# Forecast the next 365 periods
+forecast_result <- forecast(fit, h = 36)
+
+# Display forecast accuracy
+accuracy(forecast_result)
+
+# Plot the forecast
+autoplot(forecast_result) +
+  labs(title = "ARIMA(1,1,1)x(0,1,1)[12] Forecast",
+       x = "Time",
+       y = "Predicted Values") +
+  theme_minimal()
+```
+This plot presents the SARIMA(1,1,1)(0,1,1)[12] forecast for the next three years. The model suggests that container throughput at the Port of Los Angeles will remain at historically high levels, with clear seasonal fluctuations persisting. The mean forecast indicates relative stability without a strong upward or downward trend, while the widening confidence intervals highlight increasing uncertainty over time. Port activity is highly sensitive to global trade conditions, capacity constraints, and potential external shocks.
+
+
+```{r}
+###### Forecast for 36 Periods (3 Years) ######
+forecast_horizon <- 36  # 36 months (3 years)
+
+###### Plot Forecasts Using Mean, Naïve, Drift Methods, and ARIMA Fit ######
+autoplot(ts_df) +
+  autolayer(meanf(ts_df, h = forecast_horizon), series = "Mean", PI = FALSE) +
+  autolayer(snaive(ts_df, h = forecast_horizon), series = "Naïve", PI = FALSE) +
+  autolayer(rwf(ts_df, drift = TRUE, h = forecast_horizon), series = "Drift", PI = FALSE) +
+  autolayer(forecast(fit, h = forecast_horizon), series = "ARIMA Fit", PI = FALSE) +
+  ggtitle("TEUs Forecast (Next 3 Year)") +
+  xlab("Year") + 
+  ylab("TEUs") +
+  guides(colour = guide_legend(title = "Forecast Methods")) +
+  theme_minimal()
+```
+This plot compares SARIMA with alternative benchmark methods, including Drift, Mean, and Naïve forecasts. The Naïve model simply extends the last observation forward, failing to capture the seasonal structure of the series. The Mean method produces an overly smoothed, nearly constant forecast that lacks interpretive value for a dynamic system. The Drift model incorporates a trend component but similarly neglects the strong seasonal patterns present in the data. In contrast, the SARIMA model effectively captures both long-term dynamics and recurring seasonal cycles, producing forecasts that are more consistent with historical patterns. 
+
+As such, SARIMA provides a more realistic and reliable basis for understanding future container throughput compared to simpler benchmark methods.
+
+```{r}
+# Load required libraries
+library(tsibble)
+library(prophet)
+
+prophet_data <- df_teu%>%
+  select(Date, TEUs) %>%
+  rename(ds = Date, y = TEUs )  # Rename for Prophet
+
+###### Fit the Prophet Model ######
+prophet_model <- prophet(prophet_data)
+
+###### Extend the Forecast Horizon by 120 Months (10 Years) ######
+future_dates <- make_future_dataframe(prophet_model, periods = 36, freq = "month")
+
+###### Generate Forecasts ######
+forecast_data <- predict(prophet_model, future_dates)
+
+###### Plot Forecast ######
+plot(prophet_model, forecast_data) +
+  ggtitle("Forecast TEUs (Next 3 Years)") +
+  xlab("Date") +
+  ylab("TEUs")
+```
+This forecast model differs from the SARIMA approach in several key ways. First, SARIMA explicitly incorporates seasonal differencing and seasonal parameters, which allows it to capture recurring 12-month cycles more precisely. In contrast, the model shown here reflects seasonal fluctuations indirectly through its fitted trend and widening confidence intervals, rather than parameterizing seasonality directly. Second, the SARIMA forecasts are typically smoother and preserve a clear seasonal pattern over time, whereas this model also reproduces seasonal swings but with wider uncertainty bands, indicating greater caution about long-term stability. Finally, while SARIMA is particularly well-suited for datasets with strong and stable seasonal patterns, the current model is more flexible in balancing trend and seasonal dynamics, though it may be less robust for long-horizon forecasts.
+
+
+```{r}
+###### Forecast Next 12 Months Using SARIMA(1,0,2)(0,1,1)[12] ######
+sarima.for(ts_df, 12, 1,1,1,0,1,1,12)
+```
+The black line and points represent the historical container throughput (TEUs) from 2011 to 2020, showing notable fluctuations with an extreme dip around 2016. The red line and points indicate the forecasted values, which follow the historical pattern and maintain a relatively stable level without sharp deviations. The shaded gray area illustrates the confidence intervals, which widen over time, reflecting growing uncertainty in longer-term forecasts.
+
+Overall, the model suggests that throughput at the Port of Los Angeles is expected to remain close to its historical average over the next year, with regular seasonal fluctuations but no significant structural shifts. The widening forecast intervals also highlight the potential influence of external economic, trade, or policy factors that could affect future outcomes.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
