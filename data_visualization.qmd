@@ -12,7 +12,6 @@ execute:
 ---
 # 1. TEUs timeline with events
 ```{r}
-# ---- packages ----
 library(tidyverse)
 library(zoo)
 library(scales)
@@ -29,6 +28,7 @@ la_teu_data <- read_csv("data-raw/la_teu_data.csv", show_col_types = FALSE) %>%
 
 la_teu_data <- la_teu_data %>%
   mutate(MA12 = zoo::rollmean(Total_TEUs, k = 12, align = "right", fill = NA))
+la_teu_data  <- la_teu_data  %>% filter(Date >= as.Date("2000-01-01"))
 
 # ---- color ----
 col_teus <- "#3BC5B5"  # Monthly TEUs
@@ -56,255 +56,309 @@ ggplot(la_teu_data, aes(x = Date)) +
 
 ```
 
-The chart shows the monthly container throughput (TEUs) at the Port of Los Angeles from 1995 to 2024, along with a 12-month moving average to highlight long-term patterns. The raw monthly series (teal) captures short-term fluctuations, while the smoothed trend (orange) emphasizes broader cycles in trade volume. The data reveal steady growth from the late 1990s through the mid-2000s, a sharp decline during the 2008 global financial crisis, and renewed expansion in the 2010s. More recently, the series reflects disruptions associated with the COVID-19 pandemic and subsequent recovery, followed by signs of stabilization. Overall, the long-term moving average indicates that despite cyclical downturns, container volumes have trended upward, underscoring the port’s critical role in global trade.
 
-# 2. Seasonality Patterns of TEUs
+The chart shows the monthly container throughput (TEUs) at the Port of Los Angeles from 1995 to 2024, along with a 12-month moving average to highlight long-term patterns. The raw monthly series (teal) captures short-term fluctuations, while the smoothed trend (orange) emphasizes broader cycles in trade volume. The data reveal steady growth through the mid-2000s, a sharp decline during the 2008 global financial crisis, and renewed expansion in the 2010s. More recently, the series reflects disruptions associated with the COVID-19 pandemic and subsequent recovery, followed by signs of stabilization. Overall, the long-term moving average indicates that despite cyclical downturns, container volumes have trended upward, underscoring the port’s critical role in global trade.
+
+## Port Throughput Structure by Container Type
 ```{r}
-library(tidyverse)
-library(zoo)
-library(scales)
+library(dplyr)
+library(lubridate)
+library(plotly)
 
-la_teu_data <- read_csv("data-raw/la_teu_data.csv", show_col_types = FALSE) %>%
+raw <- read.csv("data-raw/la_teu_data.csv", stringsAsFactors = FALSE)
+
+num_cols <- c("Loaded_Imports","Empty_Imports","Total_Imports",
+              "Loaded_Exports","Empty_Exports","Total_Exports","Total_TEUs")
+
+Sys.setlocale("LC_TIME", "C")
+
+df <- raw %>%
   mutate(
-    ym        = zoo::as.yearmon(Date, "%b-%y"),
-    Date      = as.Date(ym),
-    Total_TEUs = readr::parse_number(Total_TEUs)
+    Date = my(Date),                   
+    across(all_of(num_cols), ~ as.numeric(gsub(",", "", .))),
+    Prior_Year_Change = suppressWarnings(as.numeric(sub("%","", Prior_Year_Change))) / 100,
+    Empty_Containers = Empty_Imports + Empty_Exports,
+    Total_calc = Loaded_Imports + Loaded_Exports + Empty_Containers,
+    Total_TEUs = ifelse(is.na(Total_TEUs), Total_calc, Total_TEUs)
   ) %>%
-  filter(!is.na(Date), !is.na(Total_TEUs)) %>%
   arrange(Date)
 
-plot_df <- la_teu_data %>%
-  transmute(
-    Year  = lubridate::year(Date),
-    Month = factor(lubridate::month(Date, label = TRUE, abbr = TRUE),
-                   levels = month.abb, ordered = TRUE),
-    TEUs  = Total_TEUs
-  ) %>%
-  drop_na()
-
-plot_df <- plot_df %>%
-  group_by(Month) %>%
-  mutate(TEUs_z = as.numeric(scale(TEUs))) %>%
-  ungroup()
-
-# --- Cube Palette---
-col_cube <- c("#2ebeb1","#d8bfd8","#ff9af6")
-
-ggplot(plot_df, aes(x = Month, y = Year, fill = TEUs)) +
-  geom_tile(color = "white") +
-  scale_fill_gradientn(
-    colours = col_cube,
-    labels = label_number(scale_cut = cut_short_scale()),
-    name = "TEUs"
-  ) +
-  labs(
-    title = "Seasonality Heatmap — Port of LA Monthly TEUs",
-    subtitle = "Brighter pink = higher throughput; lighter purple = lower throughput",
-    x = NULL, y = NULL
-  ) +
-  theme_minimal(base_size = 13) +
-  theme(
-    panel.grid = element_blank(),
-    axis.text.x = element_text(size = 11),
-    axis.text.y = element_text(size = 10),
-    legend.position = "right"
-  )
-
+df <- df %>% filter(Date >= as.Date("2000-01-01"))
 ```
-The heatmap illustrates the seasonal patterns of container throughput (TEUs) at the Port of Los Angeles across months and years. Brighter pink areas represent higher throughput, while lighter purple tones indicate lower activity. The chart shows that container volumes generally increased over the long term, with stronger activity in recent decades compared to earlier years. Seasonal peaks are visible in the late summer and fall months, reflecting heightened shipping demand ahead of the holiday season. The sharp drop in 2020 highlights the disruption caused by the COVID-19 pandemic, followed by a quick rebound, underscoring how global events directly affect port activity.
-
-# 3. Imports, Exports, and Empties — Drivers of Growth
-```{r}
-# --- packages ---
-library(tidyverse)
-library(zoo)
-library(scales)
-
-num_cols <- c(
-  "Total_TEUs","Loaded_Imports","Empty_Imports","Total_Imports",
-  "Loaded_Exports","Empty_Exports","Total_Exports"
-)
-
-la_teu_data <- read_csv("data-raw/la_teu_data.csv", show_col_types = FALSE) %>%
-  mutate(across(any_of(num_cols),
-                ~ if (is.numeric(.x)) .x else readr::parse_number(.x))) %>%
-  mutate(
-    ym   = zoo::as.yearmon(Date, "%b-%y"),
-    Date = as.Date(ym)
-  ) %>%
-  filter(!is.na(Date), !is.na(Total_TEUs)) %>%
-  arrange(Date)
-
-# --- Cube Palette ---
-pal <- c(
-  "Imports" = "#D20E88",     
-  "Exports" = "#8E7897",     
-  "Empties" = "#D8BFD8"      
-)
-
-# --- empties, imports, exports ---
-plot_data <- la_teu_data %>%
-  transmute(
-    Date,
-    Imports = Total_Imports,
-    Exports = Total_Exports,
-    Empties = Empty_Imports + Empty_Exports
-  ) %>%
-  pivot_longer(-Date, names_to = "Flow", values_to = "TEUs") %>%
-  drop_na(TEUs)
-
-plot_abs <- ggplot(plot_data, aes(Date, TEUs, fill = Flow)) +
-  geom_area(size = 0.1, color = "white", alpha = 0.98) +
-  scale_fill_manual(values = pal, name = NULL) +
-  scale_y_continuous(
-    labels = label_number(scale_cut = cut_short_scale()),
-    limits = c(0, 1.5e6)  
-  ) +
-  labs(
-    title = "Port of LA — Imports vs Exports (with Empties)",
-    subtitle = "Stacked monthly TEUs show which side drives growth over time",
-    x = NULL, y = "TEUs"
-  ) +
-  theme_minimal(base_size = 13) +
-  theme(
-    panel.grid.minor = element_blank(),
-    legend.position = "right"
-  )
-
-print(plot_abs)
-
-
-```
-The stacked area chart illustrates the evolution of imports, exports, and empty containers at the Port of Los Angeles over time. Overall TEU volumes have grown substantially since the mid-1990s, with imports accounting for the largest share of growth. Exports, while present, remain comparatively stable and contribute less to the overall increase. Empty containers also represent a notable component, highlighting imbalances in trade flows and the logistics challenges of repositioning containers. This visualization emphasizes that the surge in port activity has been largely driven by rising imports, reflecting U.S. consumer demand and the growing role of Asia–U.S. trade.
-
-# 4. TEUs and External Variables — Interactive Relationships
 ```{r}
 library(plotly)
-library(readr)
-library(dplyr)
-library(tidyverse)
-library(zoo)
-library(lubridate)
-
-teu <- read_csv("data-raw/la_teu_data.csv", show_col_types = FALSE) %>%
-  mutate(
-    ym   = zoo::as.yearmon(Date, "%b-%y"), 
-    Date = as.Date(ym)                     
-  ) %>%
-  select(Date, TEUs = Total_TEUs)
-
-wti <- read_csv("data-raw/WTI.csv", show_col_types = FALSE) %>%
-  rename(Date = observation_date, WTI = WTISPLC)
-
-brent <- read_csv("data-raw/brent.csv", show_col_types = FALSE) %>%
-  rename(Date = observation_date, Brent = MCOILBRENTEU)
-
-usd <- read_csv("data-raw/usd.csv", show_col_types = FALSE) %>%
-  rename(Date = observation_date, USD = DTWEXBGS)
-
-rsa <- read_csv("data-raw/RSAFS.csv", show_col_types = FALSE) %>%
-  rename(Date = observation_date, RSAFS = RSAFS)
-
-sp500 <- read_csv("data-raw/SP500.csv", show_col_types = FALSE) %>%
-  rename(Date = observation_date, SP500 = SP500)
-
-rmb <- read_csv("data-raw/rmb.csv", show_col_types = FALSE) %>%
-  rename(Date = observation_date, RMB = DEXCHUS)
-
-
-df <- teu %>%
-  left_join(wti,   by = "Date") %>%
-  left_join(brent, by = "Date") %>%
-  left_join(usd,   by = "Date") %>%
-  left_join(rsa,   by = "Date") %>%
-  left_join(sp500, by = "Date") %>%
-  left_join(rmb,   by = "Date")
-
-# handle na
-df <- df %>%
-  mutate(
-    WTI   = zoo::na.locf(WTI,   na.rm = FALSE),
-    Brent = zoo::na.locf(Brent, na.rm = FALSE),
-    USD   = zoo::na.locf(USD,   na.rm = FALSE),
-    RSAFS = zoo::na.locf(RSAFS, na.rm = FALSE),
-    SP500 = zoo::na.locf(SP500, na.rm = FALSE),
-    RMB   = zoo::na.locf(RMB,   na.rm = FALSE)
-  ) %>%
-  filter(Date >= as.Date("2000-01-01"), Date <= as.Date("2024-01-01"))
-
-
-p <- plot_ly(df, x = ~Date) %>%
-  add_lines(y = ~TEUs, name = "TEUs", yaxis = "y1",
-            line = list(color = '#3b80c5', width = 2)) %>%
-  add_lines(y = ~WTI,  name = "WTI",  yaxis = "y2",
-            line = list(color = '#a2acbd', width = 1.5)) %>%
-  layout(
-    title  = "Port of LA TEUs vs External Drivers",
-    xaxis  = list(
-      title = "Date",
-      automargin = TRUE,
-      rangeslider = list(visible = FALSE),  
-      fixedrange  = FALSE
-    ),
-    yaxis  = list(
-      title = "TEUs",
-      rangemode = "tozero",
-      automargin = TRUE,
-      nticks = 6,
-      tickformat = ",.0f"
-    ),
-    yaxis2 = list(
-      overlaying = "y",
-      side       = "right",
-      automargin = TRUE,
-      nticks     = 6,
-      tickformat = ",.0f",
-      title      = list(text = "External Variable", standoff = 50)
-    ),
-    legend = list(orientation = "h", x = 0.5, y = 1.12, xanchor = "center"),
-    margin = list(l = 90, r = 150, t = 70, b = 60),
-    hovermode = "x unified",
-    autosize  = TRUE
-  ) %>%
-  config(responsive = TRUE, scrollZoom = TRUE, displaylogo = FALSE) %>%
-  layout(
-    updatemenus = list(
-      list(
-        type = "dropdown",
-        x = 0.06, y = 1.16,
-        buttons = list(
-          list(method = "restyle",
-               args = list(list(y = list(df$WTI),   name = "WTI"),        list(1)),
-               label = "WTI"),
-          list(method = "restyle",
-               args = list(list(y = list(df$Brent), name = "Brent"),      list(1)),
-               label = "Brent"),
-          list(method = "restyle",
-               args = list(list(y = list(df$USD),   name = "USD Index"),  list(1)),
-               label = "USD Index"),
-          list(method = "restyle",
-               args = list(list(y = list(df$RMB),   name = "RMB/USD"),    list(1)),
-               label = "RMB/USD"),
-          list(method = "restyle",
-               args = list(list(y = list(df$RSAFS), name = "Retail Sales"), list(1)),
-               label = "Retail Sales"),
-          list(method = "restyle",
-               args = list(list(y = list(df$SP500), name = "S&P 500"),    list(1)),
-               label = "S&P 500")
-        )
-      )
-    )
+# fig1- show all
+df_pct <- df %>%
+  transmute(
+    Date,
+    Imports_pct = Loaded_Imports / Total_TEUs,
+    Exports_pct = Loaded_Exports / Total_TEUs,
+    Empty_pct   = Empty_Containers / Total_TEUs
   )
 
-p
+df_long <- df %>%
+  select(Date, Loaded_Imports, Loaded_Exports, Empty_Containers) %>%
+  pivot_longer(cols = -Date, names_to = "Category", values_to = "TEUs")
+
+ggplot(df_long, aes(x = Date, y = TEUs, color = Category)) +
+  geom_line(size = 1) +
+  scale_color_manual(values = c(
+    "Loaded_Imports" = "#3366CC",  
+    "Loaded_Exports" = "#FF9900",   
+    "Empty_Containers" = "#009966"  
+  )) +
+  labs(
+    title = "Port of Los Angeles — Container Throughput by Category",
+    subtitle = "Monthly Loaded Imports, Loaded Exports, and Empty Containers",
+    x = "Year",
+    y = "TEUs",
+    color = "Category"
+  ) +
+  theme_minimal(base_size = 14) +
+  theme(
+    plot.title = element_text(face = "bold", size = 16),
+    legend.position = "bottom",
+    legend.title = element_blank()
+  )
+# fig2- show the composition
+df_pct <- df %>%
+  transmute(
+    Date,
+    Imports_pct = Loaded_Imports / Total_TEUs,
+    Exports_pct = Loaded_Exports / Total_TEUs,
+    Empty_pct   = Empty_Containers / Total_TEUs
+  )
+
+fig_comp <- plot_ly(df_pct, x = ~Date, y = ~Imports_pct, name = "Loaded Imports",
+                    type = 'scatter', mode = 'none', fill = 'tonexty', stackgroup = 'one', groupnorm = 'fraction') %>%
+  add_trace(y = ~Exports_pct, name = "Loaded Exports", fill = 'tonexty') %>%
+  add_trace(y = ~Empty_pct,   name = "Empty Containers", fill = 'tonexty') %>%
+  layout(
+    title = "Composition of Port Throughput (Share of Total TEUs)",
+    xaxis = list(title = "Year"),
+    yaxis = list(title = "Share of Total TEUs", tickformat = ".0%"),
+    legend = list(orientation = 'h', x = 0.2, y = -0.2)
+  )
+
+fig_comp
+
 ```
 
-- **WTI Oil Price vs TEUs**: TEUs tend to fall when WTI prices surge, showing the impact of fuel costs on shipping activity.
-- **Brent Oil Price vs TEUs**: Similar to WTI, Brent prices show a negative relationship with TEUs, but the effect appears less direct after 2015.
-- **USD Index vs TEUs**: A stronger USD often corresponds with lower TEUs, suggesting a strong dollar reduces U.S. import demand.
-- **RMB/USD Exchange Rate vs TEUs**: TEUs increase when RMB weakens (higher CNY per USD), supporting the idea that cheaper Chinese exports drive more U.S. imports.
-- **Retail Sales vs TEUs**: U.S. retail sales move in line with TEUs, highlighting how consumer demand directly pulls imports.
-- **S&P 500 vs TEUs**: TEUs generally rise with the S&P 500, reflecting that economic optimism and stock market strength support trade volume.
+Since 2000, the Port of Los Angeles has shown a steady upward trend in overall container throughput, reflecting the continued expansion of U.S. trade volume and the growing integration of global supply chains.
+Structurally, imports have consistently dominated, while exports have remained relatively weak, and the share of empty containers has gradually increased.
+This pattern of strong imports, weak exports, and rising empty container flows highlights the United States’ long-standing trade imbalance and the structural asymmetry in global supply chains following the shift of manufacturing to Asia.
+
+
+# 2. Energy & Currency Drivers 
+```{r}
+library(readr)
+library(dplyr)
+brent <- read_csv("data-raw/brent.csv", show_col_types = FALSE)
+WTI   <- read_csv("data-raw/WTI.csv", show_col_types = FALSE)
+usd   <- read_csv("data-raw/usd.csv", show_col_types = FALSE)
+rmb   <- read_csv("data-raw/rmb.csv", show_col_types = FALSE)
+
+brent <- brent %>%
+  rename(Date = observation_date, Price = MCOILBRENTEU)
+
+WTI <- WTI %>%
+  rename(Date = observation_date, Price = WTISPLC)
+
+usd <- usd %>%
+  rename(Date = observation_date, Index = DTWEXBGS)
+
+rmb <- rmb %>%
+  rename(Date = observation_date, Rate = DEXCHUS)
+rmb <- rmb  %>% filter(Date >= as.Date("2006-01-01"))
+
+#head(brent)
+```
+
+::: {.panel-tabset}
+## WTI Crude Oil
+```{r}
+ggplot(WTI, aes(x = Date, y = Price)) +
+  geom_line(color = "#3b4a3f", size = 1) +
+  labs(title = "WTI Crude Oil Price", x = "Year", y = "USD per Barrel") +
+  theme_minimal(base_size = 14)
+```
+The WTI crude oil price shows significant volatility, with sharp rises before 2008 and 2022, followed by steep declines. Overall, prices have fluctuated between 20–120 USD per barrel over the past two decades, reflecting global energy demand, geopolitical tensions, and supply shocks.
+
+## Brent Crude Oil
+```{r}
+ggplot(brent, aes(x = Date, y = Price)) +
+geom_line(color = "#eb9844", size = 1) +
+labs(title = "Brent Crude Oil Price", x = "Year", y = "USD per Barrel") +
+theme_minimal(base_size = 14)
+```
+Brent crude oil shows a similar trend to WTI, with synchronized peaks and troughs. The two benchmarks remain closely aligned, though Brent tends to trade slightly higher, indicating its broader international pricing influence.
+
+## U.S. Dollar Index (DXY)
+```{r}
+## U.S. Dollar Index (DXY)
+ggplot(usd, aes(x = Date, y = Index)) +
+geom_line(color = "#88a5ff", size = 1) +
+labs(title = "U.S. Dollar Index (DXY)", x = "Year", y = "Index") +
+theme_minimal(base_size = 14)
+```
+The U.S. Dollar Index (DXY) displays long-term cyclical movements, strengthening notably after 2014 and again in 2022. Its upward trend indicates a stronger dollar, which often dampens global commodity prices and affects U.S. trade dynamics.
+
+## RMB/USD Exchange Rate
+```{r}
+ggplot(rmb, aes(x = Date, y = Rate)) +
+geom_line(color = "#7ed99b", size = 1) +
+labs(title = "RMB/USD Exchange Rate", x = "Year", y = "Rate") +
+theme_minimal(base_size = 14)
+```
+The RMB/USD exchange rate shows a long-term depreciation of the RMB since 2014, with fluctuations reflecting trade tensions and monetary policy shifts. A weaker RMB increases export competitiveness but raises import costs.
+
+:::
+
+
+# 3. Supply Chain & Policy Shocks
+
+::: {.panel-tabset}
+## Global Supply Chain Pressure Index
+```{r}
+gscpi <- read_csv(
+  "data-raw/GSCPI.csv",
+  col_types = cols(
+    Date  = col_date(format = "%d-%b-%Y"),  # 31-Jan-1998
+    GSCPI = col_double()
+  ),
+  show_col_types = FALSE
+) %>%
+  mutate(Date = floor_date(Date, "month")) %>%  
+  filter(Date >= as.Date("2000-01-01"))
+
+ggplot(gscpi, aes(x = Date, y = GSCPI)) +
+geom_line(color = "#9eb0a2", size = 1) +
+labs(title = "Global Supply Chain Pressure Index", x = "Year", y = "GSCPI") +
+theme_minimal(base_size = 14)
+```
+The Global Supply Chain Pressure Index (GSCPI) reflects the overall stress in global supply chains by aggregating data from transportation costs, shipping delays, and manufacturing delivery times. Higher values indicate greater global supply chain disruptions.
+The index shows spikes during major crises — notably the 2008 financial crisis, the 2020 COVID-19 pandemic, and subsequent port congestion — before returning toward normal levels after 2022.
+
+## Trend of AHS Weighted Average Tariff (U.S.)
+```{r}
+ahs_y <- read_csv("data-raw/ahs.csv", show_col_types = FALSE) %>%
+  rename(Year = Date, Tariff = `AHS Weighted Average (%)`) %>%
+  mutate(Year = as.integer(Year))
+
+ggplot(ahs_y, aes(x = factor(Year), y = Tariff)) +
+  geom_col(fill = "#ffe081", alpha = 0.8) +
+  labs(title = "U.S. Applied Tariff – AHS Weighted Average (%)",
+       subtitle = "Annual weighted average tariff rate, 1988–2022",
+       x = "Year", y = "Percent") +
+  theme_minimal(base_size = 14) +
+  theme(axis.text.x = element_text(angle = 45, hjust = 1))
+
+```
+The AHS Weighted Average represents the trade-weighted average tariff rate applied by the United States on imports across all product categories. This metric captures both tariff magnitude and the relative trade volume affected.
+From 1988 to 2022, the average tariff rate declined steadily from over 12% in the early 1990s to below 5% after 2005, reflecting long-term trade liberalization, with only mild fluctuations in recent years.
+:::
+
+# 4. Financial Markets & Demand 
+```{r}
+library(quantmod)
+library(dplyr)
+library(lubridate)
+
+getSymbols("^DJT", src = "yahoo", from = "2000-01-01", to = "2025-10-01")
+
+djt_df <- data.frame(Date = index(DJT), coredata(DJT))
+names(djt_df) <- c("Date","Open","High","Low","Close","Adj_Close","Volume")
+
+djt_month_start <- djt_df %>%
+  arrange(Date) %>%
+  mutate(YearMonth = floor_date(Date, unit = "month")) %>%
+  group_by(YearMonth) %>%
+  slice_min(Date, with_ties = FALSE) %>%   
+  ungroup() %>%
+  transmute(Date = YearMonth,           
+            DJT_AdjClose = Adj_Close)
+
+write.csv(djt_month_start, "data-raw/djt.csv", row.names = FALSE)
+```
+
+::: {.panel-tabset}
+## SP500
+```{r}
+library(readr)
+library(ggplot2)
+library(dplyr)
+library(lubridate)
+
+sp500 <- read_csv("data-raw/sp500.csv")
+sp500 <- sp500 %>%
+mutate(Date = as.Date(observation_date)) %>%
+select(Date, SP500)
+ggplot(sp500, aes(x = Date, y = SP500)) +
+geom_line(color = "#e6dd27", size = 1) +
+labs(
+title = "S&P 500 Index",
+x = "Year",
+y = "Index Level"
+) +
+theme_minimal(base_size = 14) +
+theme(
+plot.title = element_text(face = "bold", size = 16),
+plot.subtitle = element_text(size = 13),
+axis.title = element_text(size = 13)
+)
+```
+The S&P 500 Index represents the performance of 500 large-cap U.S. companies and serves as a key barometer of market confidence.
+From 2015 to 2025, the index shows a steady upward trend, interrupted briefly by the 2020 pandemic shock and 2022 tightening cycle, followed by a strong post-pandemic recovery reaching record highs in 2025.
+
+## Dow Jones Transportation Average
+```{r}
+djt<- read_csv("data-raw/djt.csv")
+djt <- djt%>%
+mutate(Date = as.Date(Date)) %>%
+select(Date, DJT_AdjClose)
+ggplot(djt, aes(x = Date, y = DJT_AdjClose)) +
+geom_line(color = "#f98e72", size = 1) +
+labs(
+title = "Dow Jones Transportation Average",
+x = "Year",
+y = "Index Level"
+) +
+theme_minimal(base_size = 14) +
+theme(
+plot.title = element_text(face = "bold", size = 16),
+plot.subtitle = element_text(size = 13),
+axis.title = element_text(size = 13)
+)
+
+```
+The Dow Jones Transportation Average (DJT) tracks major U.S. transportation and logistics companies, which are highly sensitive to trade and supply chain activity.
+The index shows large volatility since 2020, reflecting supply-chain disruptions, freight demand shocks, and recovery waves following the pandemic.
+
+## U.S. Retail & Food Services Sales
+```{r}
+rsafs<- read_csv("data-raw/RSAFS.csv")
+rsafs <- rsafs%>%
+mutate(Date = as.Date(observation_date)) %>%
+select(Date, RSAFS)
+ggplot(rsafs, aes(x = Date, y = RSAFS)) +
+geom_line(color = "#008e87", size = 1) +
+labs(
+title = "U.S. Retail & Food Services Sales",
+x = "Year",
+y = "USD (Millions)"
+) +
+theme_minimal(base_size = 14) +
+theme(
+plot.title = element_text(face = "bold", size = 16),
+plot.subtitle = element_text(size = 13),
+axis.title = element_text(size = 13)
+)
+```
+Retail and food services sales measure consumer spending and domestic demand.
+The long-term upward trend indicates robust household consumption growth, with a sharp dip in 2020 due to COVID-19 restrictions and a rapid rebound afterward supported by stimulus and pent-up demand.
+:::
+
+
 
 
 

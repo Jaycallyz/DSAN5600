@@ -117,27 +117,12 @@ The data are available daily from **January 2020 to the present**. For this proj
 
 ## 3.3 Tariff-Weighted Index (Advanced Tariff Shock Indicator)
 
-**Data Source**: [Section 301 Tariff Lists](hhttps://ustr.gov/issue-areas/enforcement/section-301-investigations/tariff-actions?utm_source=chatgpt.com)
-- **USTR – Section 301 Tariff Lists** (List 1–4 dollar coverage) :contentReference[oaicite:4]{index=4}
+**Data Source**: [AHS weighted average](https://wits.worldbank.org/CountryProfile/en/Country/WLD/StartYear/1988/EndYear/2022/TradeFlow/Import/Indicator/AHS-WGHTD-AVRG/Partner/WLD/Product/Total#)  
 
-- **Tariff Rates**: List 1 & List 2 = 25%; List 3 ≈ 15% (10% → 25% average); List 4 ≈ 15% :contentReference[oaicite:5]{index=5}  
-
-#### Calculation:
-| List | Coverage (USD billions) | Tariff Rate (%) | Weighted Value |
-|------|--------------------------|------------------|----------------|
-| 1    | 34                      | 25              | 8.5           |
-| 2    | 16                      | 25              | 4.0           |
-| 3    | 200                     | 15              | 30.0          |
-| 4    | 300                     | 15              | 45.0          |
-
-Cumulative index over time:
-- 2018-07 → 8.5  
-- 2018-08 → 12.5  
-- 2018-09 → 42.5  
-- 2019-09 → 87.5  
+![AHS weighted average](pic/ahs.png)  
 
 **Description**:  
-The Tariff-Weighted Index reflects both the **magnitude (dollar value)** and **intensity (tariff rate)** of U.S. Section 301 actions against Chinese imports. This continuous measure provides a nuanced view of policy-induced trade shocks over time, rather than a simple 0/1 indicator.
+The AHS Weighted Average (%) indicator measures the average tariff rate applied to imported goods, weighted by their trade value. It provides a comprehensive picture of the effective protection level in global trade by combining both tariff rates and the composition of traded products. Unlike simple averages, this measure reflects the actual impact of tariffs on international trade flows and the degree of market openness over time.
 
 # 4. Financial Market & Demand Indicators
 ## 4.1 S&P 500 Index (SP500)
