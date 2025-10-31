@@ -10,238 +10,1179 @@ execute:
   warning: false
   message: false
 ---
+# 1. Time Series Plot
 
+::: {.panel-tabset}
+## Total TEUs
 ```{r}
-# read the data
-library(readr)
 library(dplyr)
-library(zoo)
-
-
-la_teu_data <- read_csv("data-raw/la_teu_data.csv", show_col_types = FALSE)
-
-la_teu_data <- la_teu_data %>%
-  filter(grepl("^[A-Za-z]{3}-\\d{2}$", Date))
-
-
-la_teu_data <- la_teu_data %>%
-  mutate(
-    ym   = as.yearmon(Date, "%b-%y"),
-    date = as.Date(ym)
-  )
-
+library(lubridate)
+library(plotly)
+library(ggplot2)  
+raw <- read.csv("data-raw/la_teu_data.csv", stringsAsFactors = FALSE)
 
 num_cols <- c("Loaded_Imports","Empty_Imports","Total_Imports",
               "Loaded_Exports","Empty_Exports","Total_Exports","Total_TEUs")
-num_cols <- intersect(num_cols, names(la_teu_data))
 
-la_teu_data <- la_teu_data %>%
-  mutate(across(all_of(num_cols), ~ readr::parse_number(as.character(.))))
+Sys.setlocale("LC_TIME", "C")
 
-la_teu_data <- la_teu_data %>%
-  arrange(date) %>%
-  distinct(date, .keep_all = TRUE) %>%
-  filter(!is.na(Total_TEUs))
-
-
-full_months <- tibble(date = seq(min(la_teu_data$date), max(la_teu_data$date), by = "month"))
-la_teu_full  <- full_months %>% left_join(la_teu_data, by = "date")
-
-# convert to the ts mode
-start_year  <- as.integer(format(min(la_teu_full$date), "%Y"))
-start_month <- as.integer(format(min(la_teu_full$date), "%m"))
-la_teu_ts <- ts(la_teu_full$Total_TEUs, start = c(start_year, start_month), frequency = 12)
-
-teu_m <- window(la_teu_ts, start = c(2000, 1), end = c(2024, 12))
-
-teu_q <- aggregate(teu_m, nfrequency = 4, FUN = sum)   # Quarterly total TEUs
-teu_y <- aggregate(teu_m, nfrequency = 1, FUN = sum)   # Yearly total TEU
-
-print(range(la_teu_full$date))
-```
-
-
-# 1. Time Series Plot
-```{r}
-plot(teu_m,
-     main = "Port of LA Monthly Container Throughput",
-     xlab = "Year",
-     ylab = "Total TEUs",
-     yaxt = "n")  
-axis(2, at = pretty(teu_m), labels = format(pretty(teu_m), big.mark = ","))
-```
-**Why Apply Log Transformation**
-
-The original monthly container throughput data for the Port of Los Angeles exhibits clear evidence of heteroscedasticity — the variance of fluctuations increases as the overall throughput level rises. This pattern is common in economic and trade-related time series where growth in scale is accompanied by greater volatility. 
-
-Such behavior can create two main issues：
-(1) statistical models such as ARIMA assume relatively stable variance, which is violated here
-(2) larger fluctuations in recent years dominate the series, making model fitting less reliable.
-
-To address these concerns, a log transformation is applied. This transformation compresses the scale of large values, stabilizes the variance, and highlights relative changes rather than absolute ones, thereby making the data more suitable for time series modeling.
-
-
-```{r}
-library(tidyr)
-library(ggplot2)
-win_start <- as.Date("2000-01-01")
-win_end   <- as.Date("2024-12-01")
-
-la_teu_win <- la_teu_full %>%
-  filter(date >= win_start, date <= win_end) %>%
+la_teu <- raw %>%
   mutate(
-    TEUs = as.numeric(Total_TEUs),
-    log_TEUs = ifelse(TEUs > 0, log(TEUs), NA_real_)
+    Date = my(Date),
+    across(all_of(num_cols), ~ as.numeric(gsub(",", "", .))),
+    Prior_Year_Change = suppressWarnings(as.numeric(sub("%","", Prior_Year_Change))) / 100,
+    Empty_Containers = Empty_Imports + Empty_Exports,
+    Total_calc = Loaded_Imports + Loaded_Exports + Empty_Containers,
+    Total_TEUs = ifelse(is.na(Total_TEUs), Total_calc, Total_TEUs)
+  ) %>%
+  arrange(Date) %>%
+  filter(Date >= as.Date("2000-01-01"))
+
+plot1 <- ggplot(data = la_teu, aes(x = Date, y = Total_TEUs)) +
+  geom_line(color = "#cddd71", linewidth = 0.8) + 
+  scale_y_continuous(
+    name = "TEUs (Units)",
+    labels = scales::comma,      
+    breaks = scales::pretty_breaks(n = 6)  
+  ) +
+  scale_x_date(
+    date_breaks = "4 year",     
+    date_labels = "%Y"             
+  ) +
+  labs(
+    x = "Year",
+    title = "Trend of Total TEUs"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold", size = 16, hjust = 0.5),
+    axis.text.x = element_text(angle = 45, vjust = 0.5),
+    panel.grid.minor = element_blank()
   )
 
-teu_df <- la_teu_win %>%
-  select(Date = date, TEUs, log_TEUs)
-
-plot_df <- teu_df |>
-  mutate(`Original TEUs` = TEUs, `log(TEUs+1)` = log(TEUs + 1)) |>
-  select(Date, `Original TEUs`, `log(TEUs+1)`) |>
-  pivot_longer(-Date, names_to = "Series", values_to = "Value")
-
-ggplot(plot_df, aes(Date, Value)) +
-  geom_line() +
-  facet_wrap(~ Series, ncol = 1, scales = "free_y") +
-  labs(title = "Original vs Log-Transformed TEUs (2000–2024)",
-       x = "Year", y = "Value") +
-  theme_minimal(base_size = 12)+
-  theme(legend.position = "right")
-
+plot1
 ```
-**Interpretation of the Transformed Data**
+The total port throughput has shown a steady upward trend since 2000, reflecting the continuous expansion of maritime trade activities. Noticeable cyclical fluctuations are present, with sharp declines around the 2008 global financial crisis and the 2020 COVID-19 pandemic, indicating the port’s sensitivity to global economic shocks.
 
-The comparison between the original series (bottom panel) and the log-transformed series (top panel) illustrates the benefits of this adjustment.
+Overall, the sustained increase highlights the port’s growing role in international trade and supply chain logistics. Given the pronounced trend and high variability, applying log transformation or differencing would help stabilize variance and mitigate the impact of extreme values, making the data more suitable for time-series modeling and forecasting.
 
-- Original TEUs (bottom panel): The series shows a long-term upward trend from 2000 to 2024, with major disruptions around 2020 due to the COVID-19 pandemic. Volatility increases over time, and recent years display sharper swings in throughput levels.
-
-- Log-Transformed TEUs (top panel): After transformation, the variance becomes more stable across time, with fluctuations compressed and appearing more uniform. The long-term growth trend remains evident, but extreme variations—especially during 2020—are moderated. This stabilization enhances the reliability of subsequent statistical modeling and allows for clearer identification of underlying patterns.
-
-# 2. Lag plot
+## Loaded Imports
 ```{r}
-library(forecast)
+plot2 <- ggplot(data = la_teu, aes(x = Date, y = Loaded_Imports)) +
+  geom_line(color = "#cddd71", linewidth = 0.8) + 
+  scale_y_continuous(
+    name = "Loaded Imports(Units)",
+    labels = scales::comma,      
+    breaks = scales::pretty_breaks(n = 6)  
+  ) +
+  scale_x_date(
+    date_breaks = "4 year",     
+    date_labels = "%Y"             
+  ) +
+  labs(
+    x = "Year",
+    title = "Trend of Loaded Imports"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold", size = 16, hjust = 0.5),
+    axis.text.x = element_text(angle = 45, vjust = 0.5),
+    panel.grid.minor = element_blank()
+  )
+
+plot2
+```
+Loaded imports exhibit a clear long-term upward trajectory, suggesting increasing dependence of U.S. domestic demand and manufacturing on imported goods. The series displays strong seasonality and cyclical fluctuations — with higher volumes typically observed toward the end of each year and during major shopping seasons — while sharp drops in 2008 and 2020 correspond to major economic disruptions.
+
+Although the overall direction remains upward, short-term volatility is considerable. For further analysis, smoothing or seasonal adjustment may be applied to extract the underlying trend and assess how import volumes respond to external factors such as energy prices or the U.S. dollar index.
+
+
+## Loaded Exports
+```{r}
+plot3 <- ggplot(data = la_teu, aes(x = Date, y = Loaded_Exports)) +
+  geom_line(color = "#cddd71", linewidth = 0.8) + 
+  scale_y_continuous(
+    name = "Loaded Exports(Units)",
+    labels = scales::comma,      
+    breaks = scales::pretty_breaks(n = 6)  
+  ) +
+  scale_x_date(
+    date_breaks = "4 year",     
+    date_labels = "%Y"             
+  ) +
+  labs(
+    x = "Year",
+    title = "Trend of Loaded Exports"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold", size = 16, hjust = 0.5),
+    axis.text.x = element_text(angle = 45, vjust = 0.5),
+    panel.grid.minor = element_blank()
+  )
+
+plot3
+```
+Loaded exports rose steadily between 2000 and 2015 but have declined since 2018, potentially due to trade frictions, tariff adjustments, and supply chain constraints. Compared with imports, exports show stronger short-term volatility and weaker seasonality, reflecting a greater sensitivity to policy and global market shifts.
+
+A pronounced drop in 2020 followed by only partial recovery indicates persistent challenges in outbound trade capacity. These dynamics suggest that export performance is heavily influenced by external demand and policy shocks, warranting further examination using global demand indicators and exchange rate movements to capture the long-run structural effects.
+
+## Brent Crude Oil Price
+```{r}
+library(readr)
+library(dplyr)
+brent <- read_csv("data-raw/brent.csv", show_col_types = FALSE)
+WTI   <- read_csv("data-raw/WTI.csv", show_col_types = FALSE)
+usd   <- read_csv("data-raw/usd.csv", show_col_types = FALSE)
+rmb   <- read_csv("data-raw/rmb.csv", show_col_types = FALSE)
+
+brent <- brent %>%
+  rename(Date = observation_date, Price = MCOILBRENTEU)
+usd <- usd %>%
+  rename(Date = observation_date, Index = DTWEXBGS)
+
+plot4 <- ggplot(data = brent, aes(x = Date, y = Price)) +
+  geom_line(color = "#cddd71", linewidth = 0.8) + 
+  scale_y_continuous(
+    name = "USD per Barrel",
+    labels = scales::comma,      
+    breaks = scales::pretty_breaks(n = 6)  
+  ) +
+  scale_x_date(
+    date_breaks = "4 year",     
+    date_labels = "%Y"             
+  ) +
+  labs(
+    x = "Year",
+    title = "Trend of Brent Crude Oil Price"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold", size = 16, hjust = 0.5),
+    axis.text.x = element_text(angle = 45, vjust = 0.5),
+    panel.grid.minor = element_blank()
+  )
+
+plot4
+```
+The Brent crude oil price exhibits significant volatility since 2000, with major peaks around 2008 and 2022 corresponding to the pre-financial-crisis surge and the Russia–Ukraine conflict, respectively. Sharp declines in 2014 and 2020 reflect global supply–demand shocks and geopolitical instability in energy markets.
+
+Overall, the series shows a cyclical pattern driven by macroeconomic and geopolitical factors. To analyze the long-term influence of oil prices on trade costs, applying log transformation or smoothing may help reduce extreme fluctuations and stabilize variance for modeling.
+
+## U.S. Dollar Index
+```{r}
+plot5 <- ggplot(data = usd , aes(x = Date, y = Index)) +
+  geom_line(color = "#cddd71", linewidth = 0.8) + 
+  scale_y_continuous(
+    name = "USD Index",
+    labels = scales::comma,      
+    breaks = scales::pretty_breaks(n = 6)  
+  ) +
+  scale_x_date(
+    date_breaks = "4 year",     
+    date_labels = "%Y"             
+  ) +
+  labs(
+    x = "Year",
+    title = "Trend of U.S. Dollar Index"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold", size = 16, hjust = 0.5),
+    axis.text.x = element_text(angle = 45, vjust = 0.5),
+    panel.grid.minor = element_blank()
+  )
+
+plot5
+```
+The U.S. Dollar Index fluctuates upward between 2008 and 2024, showing multiple appreciation phases. After a temporary strengthening during the 2008 crisis, the dollar steadily rose from 2014 onward, peaking in 2022 amid global uncertainty and strong U.S. recovery.
+
+Since a stronger dollar tends to reduce import costs but weaken export competitiveness, its fluctuations may affect port trade volumes. In subsequent analysis, differencing or trend decomposition can be applied to isolate the cyclical impact of currency movements on port throughput.
+
+## Global Supply Chain Pressure Index
+```{r}
+gscpi <- read_csv(
+  "data-raw/GSCPI.csv",
+  col_types = cols(
+    Date  = col_date(format = "%d-%b-%Y"),  # 31-Jan-1998
+    GSCPI = col_double()
+  ),
+  show_col_types = FALSE
+) %>%
+  mutate(Date = floor_date(Date, "month")) %>%  
+  filter(Date >= as.Date("2000-01-01"))
+
+plot6 <- ggplot(data = gscpi , aes(x = Date, y = GSCPI)) +
+  geom_line(color = "#cddd71", linewidth = 0.8) + 
+  scale_y_continuous(
+    name = "Global Supply Chain Pressure Index",
+    labels = scales::comma,      
+    breaks = scales::pretty_breaks(n = 6)  
+  ) +
+  scale_x_date(
+    date_breaks = "4 year",     
+    date_labels = "%Y"             
+  ) +
+  labs(
+    x = "Year",
+    title = "Trend of Global Supply Chain Pressure Index"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold", size = 16, hjust = 0.5),
+    axis.text.x = element_text(angle = 45, vjust = 0.5),
+    panel.grid.minor = element_blank()
+  )
+
+plot6
+```
+The Global Supply Chain Pressure Index remains relatively stable near zero over time but spikes sharply during major global disruptions such as the 2008 financial crisis, the COVID-19 pandemic, and the 2021–2022 logistics bottlenecks. The extreme peaks indicate severe supply chain stress and transportation bottlenecks worldwide.
+
+Given its volatility and external nature, this index serves as a valuable exogenous variable to capture the impact of global supply chain disruptions on port throughput dynamics.
+
+## AHS Weighted Average Tariff
+```{r}
+library(readr)
+library(dplyr)
 library(ggplot2)
 library(scales)
 
-gglagplot(teu_m, lags = 9, do.lines = FALSE) +
-  labs(title = "Lag Plots (1–9) — TEUs (2000–2024)",
-       x = "Lagged TEUs", y = "Current TEUs") +
-  scale_y_continuous(labels = label_number(scale = 1e-6, suffix = "M")) +
-  scale_x_continuous(labels = label_number(scale = 1e-6, suffix = "M")) +
-  theme_minimal(base_size = 12) +
+ahs_y <- read_csv("data-raw/ahs.csv", show_col_types = FALSE) %>%
+  rename(
+    Year = Date,
+    Tariff = `AHS Weighted Average (%)`
+  ) %>%
+  filter(Year >= 2000, Year <= 2022)
+
+plot7<- ggplot(data = ahs_y, aes(x = Year, y = Tariff)) +
+  geom_line(color = "#cddd71", linewidth = 0.8) +
+  geom_point(color = "#cddd71", size = 2) + 
+  scale_x_continuous(
+    breaks = seq(2000, 2022, by = 2),       
+    expand = expansion(mult = c(0.01, 0.01))
+  ) +
+  scale_y_continuous(
+    name = "U.S. Applied Tariff – AHS Weighted Average (%)",
+    labels = label_number(accuracy = 0.1, suffix = "%"),
+    breaks = pretty_breaks(n = 6)
+  ) +
+  labs(
+    x = "Year",
+    title = "Trend of AHS Weighted Average (2000–2022)"
+  ) +
+  theme_minimal(base_size = 13) +
   theme(
-    axis.text.x = element_text(angle = 45, hjust = 1),  
-    axis.text.y = element_text(angle = 0, hjust = 1)    
+    plot.title = element_text(face = "bold", size = 16, hjust = 0.5),
+    axis.text.x = element_text(angle = 45, vjust = 0.5),
+    panel.grid.minor = element_blank()
+  )
+
+plot7
+```
+The U.S. applied tariff, measured by the AHS weighted average, shows a persistent downward trend since 2000, declining from around 8% to 4%. The reduction coincides with major trade liberalization efforts, particularly following China’s WTO accession in 2001.
+
+This steady decline indicates a structural easing of trade barriers, which has facilitated import expansion over time. In modeling, the tariff rate can be treated as a policy variable to explore its long-run cointegration with import volume and overall port activity.
+
+## S&P 500 Index
+```{r}
+library(readr)
+library(dplyr)
+library(lubridate)
+library(ggplot2)
+library(scales)
+
+sp500 <- read_csv("data-raw/sp500.csv") %>%
+  mutate(Date = as.Date(observation_date)) %>%
+  filter(Date >= as.Date("2015-10-01") & Date <= as.Date("2024-12-01")) %>%
+  mutate(Year = year(Date), Month = month(Date)) %>%
+  group_by(Year, Month) %>%
+  slice_max(Date) %>%                
+  ungroup() %>%
+  mutate(YearMonth = as.Date(paste0(Year, "-", Month, "-01"))) %>%  
+  select(YearMonth, SP500)
+sp500_clean <- sp500 %>%
+  filter(!is.na(SP500))
+
+plot8 <- ggplot(sp500_clean, aes(x = YearMonth, y = SP500)) +
+  geom_line(color = "#cddd71", linewidth = 0.8) +
+  scale_y_continuous(
+    name = "S&P 500 Index (Monthly Close)",
+    labels = scales::comma,
+    breaks = scales::pretty_breaks(n = 6)
+  ) +
+  scale_x_date(
+    date_breaks = "1 year",
+    date_labels = "%Y"
+  ) +
+  labs(
+    x = "Year",
+    title = "Trend of S&P 500 Index (2015–2024)"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold", size = 16, hjust = 0.5),
+    axis.text.x = element_text(angle = 45, vjust = 0.5),
+    panel.grid.minor = element_blank()
+  )
+
+plot8
+```
+Between 2015 and 2024, the S&P 500 Index demonstrates a strong upward trend, reflecting the sustained expansion of the U.S. capital market. Despite a brief decline during the COVID-19 outbreak in 2020, the index rebounded rapidly and reached record highs by 2024, largely driven by the growth of technology sectors and accommodative monetary policy.
+
+This pattern underscores the S&P 500’s role as a key indicator of macroeconomic health and investor sentiment. In subsequent modeling, it can serve as a proxy for financial market expectations, helping to capture the interdependence between trade activity and market confidence.
+
+## U.S. Retail & Food Services Sales
+```{r}
+rsafs<- read_csv("data-raw/RSAFS.csv")
+rsafs <- rsafs%>%
+  mutate(Date = as.Date(observation_date)) %>%
+  select(Date, RSAFS)
+
+plot9 <- ggplot(data =rsafs , aes(x = Date, y = RSAFS)) +
+  geom_line(color = "#cddd71", linewidth = 0.8) + 
+  scale_y_continuous(
+    name = "U.S. Retail & Food Services Sales",
+    labels = scales::comma,      
+    breaks = scales::pretty_breaks(n = 6)  
+  ) +
+  scale_x_date(
+    date_breaks = "4 year",     
+    date_labels = "%Y"             
+  ) +
+  labs(
+    x = "Year",
+    title = "Trend of U.S. Retail & Food Services Sales"
+  ) +
+  theme_minimal(base_size = 13) +
+  theme(
+    plot.title = element_text(face = "bold", size = 16, hjust = 0.5),
+    axis.text.x = element_text(angle = 45, vjust = 0.5),
+    panel.grid.minor = element_blank()
+  )
+
+plot9
+```
+U.S. Retail & Food Services Sales show a steady long-term increase since 2000, indicating sustained growth in household spending and domestic demand. Temporary declines during the 2008 financial crisis and the 2020 pandemic were followed by rapid recoveries, with post-pandemic fiscal stimulus pushing sales to record levels.
+
+This variable captures both a persistent upward trend and short-term fluctuations, making it a strong indicator of domestic demand strength. In modeling, it can be employed as a macro-demand variable to explore the long-run linkage between port import volumes and internal consumption dynamics.
+
+:::
+
+Based on the time series patterns observed in the nine plots, several variables display clear upward trends, cyclical fluctuations, and varying degrees of volatility. To enhance model performance and interpretability, a log transformation will be applied to variables with strong growth patterns or high variance, including Total TEUs, Loaded Imports, Loaded Exports, Brent Crude Oil Price, and U.S. Retail & Food Services Sales.
+This transformation helps stabilize variance, mitigate the influence of extreme values, and linearize multiplicative growth relationships that are common in trade and price data.
+
+In contrast, policy and index-based indicators such as the U.S. Dollar Index, Global Supply Chain Pressure Index, and AHS Weighted Average Tariff will remain in their original scales, as they already exhibit stationary or bounded behavior. Overall, the log transformation ensures the series are more suitable for modeling long-term elasticities and for capturing proportional rather than absolute changes in port activity and related macroeconomic drivers.
+
+
+# 2. Lag plot
+::: {.panel-tabset}
+
+## Total TEUs
+```{r}
+library(forecast)
+library(ggplot2)
+library(scales) 
+
+la_teu_ts <- ts(la_teu$Total_TEUs, start = c(2000, 1), frequency = 12)
+
+gglagplot(la_teu_ts, do.lines = FALSE) +
+  xlab("Lags") +
+  ylab("Total TEUs (Units)") +
+  ggtitle("Lag Plot of Total TEUs") +
+  scale_x_continuous(labels = comma) + 
+  scale_y_continuous(labels = comma) +  
+  theme_minimal(base_size = 13) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(face = "bold", size = 15, hjust = 0.5)
+  )
+```
+The lag plot of Total TEUs shows a strong positive autocorrelation across multiple lags, with noticeable clustering along the diagonal line. This indicates that past monthly throughput strongly predicts future levels, suggesting persistent growth patterns and potential unit-root behavior. The consistent spread across seasons reflects stable cyclical activity, implying non-stationarity that may require differencing or log transformation for modeling.
+
+## Loaded Imports
+```{r}
+la_li_ts <- ts(la_teu$Loaded_Imports, start = c(2000, 1), frequency = 12)
+gglagplot(la_li_ts, do.lines = FALSE) +
+  xlab("Lags") +
+  ylab("Loaded Imports (Units)") +
+  ggtitle("Lag Plot of Loaded Imports") +
+  scale_x_continuous(labels = comma) + 
+  scale_y_continuous(labels = comma) +  
+  theme_minimal(base_size = 13) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(face = "bold", size = 15, hjust = 0.5)
+  )
+```
+The lag plot of Loaded Imports reveals a strong and stable autocorrelation pattern, particularly evident at shorter lags. The dense linear clustering suggests persistent import activity and seasonal cycles within each year. However, the gradual dispersion at longer lags implies mild trend shifts over time. The overall pattern indicates non-stationary behavior with a strong seasonal component, making seasonal differencing an appropriate transformation step.
+
+## Loaded Exports
+```{r}
+la_le_ts <- ts(la_teu$Loaded_Exports, start = c(2000, 1), frequency = 12)
+gglagplot(la_le_ts, do.lines = FALSE) +
+  xlab("Lags") +
+  ylab("Loaded Exports (Units)") +
+  ggtitle("Lag Plot of Loaded Exports") +
+  scale_x_continuous(labels = comma) + 
+  scale_y_continuous(labels = comma) +  
+  theme_minimal(base_size = 13) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(face = "bold", size = 15, hjust = 0.5)
+  )
+```
+The lag plot of Loaded Exports demonstrates a moderate yet clear positive autocorrelation across most lags. Compared to imports, exports show greater dispersion and weaker seasonal clustering, suggesting more variability in export activity. This pattern implies partial persistence with possible structural shifts, consistent with trade fluctuations and external market shocks. Stationarity could be improved through transformation or detrending.
+
+## Brent Crude Oil Price
+```{r}
+brent_ts <- ts(brent$Price, start = c(2000, 1), frequency = 12)
+gglagplot(brent_ts, do.lines = FALSE) +
+  xlab("Lags") +
+  ylab("Brent Crude Oil Price") +
+  ggtitle("Lag Plot of Brent Crude Oil Price") +
+  scale_x_continuous(labels = comma) + 
+  scale_y_continuous(labels = comma) +  
+  theme_minimal(base_size = 13) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(face = "bold", size = 15, hjust = 0.5)
+  )
+```
+The lag plot of Brent Crude Oil Price exhibits strong positive autocorrelation at short lags, with points forming a clear diagonal pattern. This indicates that oil prices are highly persistent and influenced by their recent values. However, the dispersion increases at higher lags, suggesting the presence of market shocks and cyclical adjustments over time. The combination of persistence and volatility implies non-stationarity, making log transformation and differencing suitable preprocessing steps for modeling.
+
+## U.S. Dollar Index
+```{r}
+usd_ts <- ts(usd$Index, start = c(2000, 1), frequency = 12)
+gglagplot(usd_ts, do.lines = FALSE) +
+  xlab("Lags") +
+  ylab("USD Index") +
+  ggtitle("Lag Plot of USD Index") +
+  scale_x_continuous(labels = comma) + 
+  scale_y_continuous(labels = comma) +  
+  theme_minimal(base_size = 13) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(face = "bold", size = 15, hjust = 0.5)
+  )
+```
+The lag plot of the USD Index shows near-perfect linear alignment across all lags, reflecting extremely strong positive autocorrelation. This pattern indicates that the series follows a highly persistent trend, typical of financial indicators exhibiting unit-root behavior. The lack of scatter or cyclical variation suggests minimal short-term volatility and long-term non-stationarity. Differencing is necessary to remove the trend and stabilize the mean before applying any time-series models.
+
+## Global Supply Chain Pressure Index
+```{r}
+gscpi_ts <- ts(gscpi$GSCPI, start = c(2000, 1), frequency = 12)
+gglagplot(gscpi_ts, do.lines = FALSE) +
+  xlab("Lags") +
+  ylab("Global Supply Chain Pressure Index") +
+  ggtitle("Lag Plot of Global Supply Chain Pressure Index") +
+  scale_x_continuous(labels = comma) + 
+  scale_y_continuous(labels = comma) +  
+  theme_minimal(base_size = 13) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(face = "bold", size = 15, hjust = 0.5)
+  )
+```
+The lag plot of the Global Supply Chain Pressure Index (GSCPI) shows moderate positive autocorrelation at short lags, but this relationship weakens rapidly after lag 4. The scattered patterns at higher lags reflect short-term persistence rather than long-term memory, consistent with the transient nature of global supply disruptions. The lack of consistent seasonality suggests that shocks dissipate quickly, and differencing may be unnecessary once volatility is stabilized.
+
+## AHS Weighted Average Tariff
+```{r}
+ahs_ts <- ts(ahs_y$Tariff, start = min(ahs_y$Year), frequency = 1)
+
+gglagplot(ahs_ts, lags = 4, do.lines = TRUE) +
+  xlab("Lags") +
+  ylab("AHS Weighted Average Tariff (%)") +
+  ggtitle("Lag Plot of AHS Weighted Average Tariff (Annual)") +
+  scale_x_continuous(labels = comma) +
+  scale_y_continuous(labels = comma) +
+  theme_minimal(base_size = 13) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(face = "bold", size = 15, hjust = 0.5)
+  )
+```
+The lag plot of the AHS Weighted Average Tariff demonstrates a persistent upward linear relationship across lags, indicating that tariff levels evolve gradually over time. The strong correlation between consecutive years implies that tariff adjustments are slow and policy-driven rather than volatile. This persistence reflects structural rigidity, suggesting that the series may contain a deterministic trend and require detrending for stationarity.
+
+## S&P 500 Index
+```{r}
+sp500_ts <- ts(sp500_clean$SP500, start = c(2000, 1), frequency = 12)
+gglagplot(sp500_ts, do.lines = FALSE) +
+  xlab("Lags") +
+  ylab("S&P 500 Index") +
+  ggtitle("Lag Plot of S&P 500 Index") +
+  scale_x_continuous(labels = comma) + 
+  scale_y_continuous(labels = comma) +  
+  theme_minimal(base_size = 13) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(face = "bold", size = 15, hjust = 0.5)
   )
 
 ```
-The figure above presents the lag plots (lags 1–9) of monthly container throughput at the Port of Los Angeles (2000–2024). Most of the points are clustered around the diagonal line, indicating strong autocorrelation between the current values and their lagged counterparts. This suggests that the throughput series exhibits persistence and momentum over time. As the lag order increases, the points become more dispersed and the correlation weakens, although a general pattern is still visible. Overall, these plots confirm the presence of temporal dependence in the data, providing justification for applying time series models such as ARIMA.
+The lag plot of the S&P 500 Index displays nearly perfect positive autocorrelation across all lags, forming a tight linear pattern along the diagonal. This indicates strong persistence and potential unit-root behavior, characteristic of financial time series that follow a random-walk process. Such high correlation suggests that shocks propagate forward over time, making differencing essential for achieving stationarity before forecasting or causal modeling.
+
+## U.S. Retail & Food Services Sales
+```{r}
+rsafs_ts <- ts(rsafs$RSAFS, start = c(2000, 1), frequency = 12)
+gglagplot(sp500_ts, do.lines = FALSE) +
+  xlab("Lags") +
+  ylab("U.S. Retail & Food Services Sales") +
+  ggtitle("Lag Plot of U.S. Retail & Food Services Sales") +
+  scale_x_continuous(labels = comma) + 
+  scale_y_continuous(labels = comma) +  
+  theme_minimal(base_size = 13) +
+  theme(
+    axis.text.x = element_text(angle = 45, hjust = 1),
+    plot.title = element_text(face = "bold", size = 15, hjust = 0.5)
+  )
+```
+The lag plot of U.S. Retail and Food Services Sales shows strong positive autocorrelation with clear seasonality, evident from repeating diagonal clusters every twelve lags. This pattern reflects stable annual consumption cycles and long-term upward trends. The series is non-stationary with both level and seasonal components; applying log-seasonal differencing would help stabilize variance and remove cyclic trends.
+
+:::
 
 # 3. Decomposition
+
+::: {.panel-tabset}
+## Total TEUs
 ```{r}
-library(forecast)
+decomposed1 <- decompose(la_teu_ts)
+autoplot(decomposed1, main = "Decomposition Plot for Total TEUs")
+```
+
+## Loaded Imports
+```{r}
+decomposed2 <- decompose(la_li_ts )
+autoplot(decomposed2, main = "Decomposition Plot for Loaded Imports")
+```
+
+## Loaded Exports
+```{r}
+decomposed3 <- decompose(la_le_ts)
+autoplot(decomposed3, main = "Decomposition Plot for Loaded Exports")
+```
+
+## Brent Crude Oil Price
+```{r}
+decomposed4 <- decompose(brent_ts)
+autoplot(decomposed4, main = "Decomposition Plot for Brent Crude Oil Price")
+```
+
+## U.S. Dollar Index
+```{r}
+library(dplyr)
+library(lubridate)
+library(zoo)
+library(forecast) 
 library(ggplot2)
 
-teu_log <- log(teu_m)
+usd_monthly <- usd %>%
+  arrange(Date) %>%
+  mutate(Index = zoo::na.approx(Index, na.rm = FALSE)) %>%  
+  mutate(ym = as.yearmon(Date)) %>%
+  group_by(ym) %>%
+  summarise(Index = dplyr::last(na.locf(Index, na.rm = FALSE)), .groups = "drop")
 
-# decompose log(TEUs)
-autoplot(decompose(teu_log)) +
-  ggtitle("Decomposition of Log-Transformed Port of LA Monthly TEUs (2000–2024)") +
-  xlab("Year") +
-  ylab("Value")
+usd_monthly <- usd_monthly %>%
+  filter(ym >= as.yearmon("2015-10") & ym <= as.yearmon("2024-12"))
+
+start_year  <- as.integer(floor(min(usd_monthly$ym)))
+start_month <- as.integer(round((min(usd_monthly$ym) - start_year) * 12 + 1))
+usd_ts <- ts(usd_monthly$Index, start = c(start_year, start_month), frequency = 12)
+
+usd_dec <- decompose(log(usd_ts), type = "multiplicative")
+autoplot(usd_dec) + ggtitle("Decomposition Plot for U.S. Dollar Index (log)")
+
+```  
+
+## Global Supply Chain Pressure Index
+```{r}
+decomposed6 <- decompose(gscpi_ts)
+autoplot(decomposed6, main = "Decomposition Plot for Global Supply Chain Pressure Index")
 ```
-- Trend shows a long-term upward movement, with significant downturns around the 2008 financial crisis and the 2020 COVID-19 shock.
-- Seasonal clearly reveals strong monthly seasonality patterns.
-- Remainder is relatively small most of the time, but shows large negative spikes in 2020, capturing the extraordinary disruptions.
+
+## AHS Weighted Average Tariff
+```{r}
+library(forecast)  
+library(ggplot2)
+library(tidyr)
+library(dplyr)
+
+k <- 5
+trend <- forecast::ma(ahs_ts, order = k, centre = TRUE)
+trend <- forecast::na.interp(trend)
+seasonal <- ts(rep(0, length(ahs_ts)), start = start(ahs_ts), frequency = 1)
+remainder <- ahs_ts - trend - seasonal
+
+df <- tibble(
+  Year = as.numeric(time(ahs_ts)),
+  data = as.numeric(ahs_ts),
+  trend = as.numeric(trend),
+  seasonal = as.numeric(seasonal),
+  remainder = as.numeric(remainder)
+) |>
+  pivot_longer(-Year, names_to = "component", values_to = "value") |>
+  mutate(component = factor(component, levels = c("data","trend","seasonal","remainder")))
+
+ggplot(df, aes(Year, value)) +
+  geom_line(linewidth = 0.7) +
+  facet_wrap(~component, ncol = 1, scales = "free_y") +
+  labs(
+    title = "Decomposition Plot for AHS Weighted Average Tariff",
+    x = "Year", y = NULL
+  ) +
+  theme_minimal(base_size = 13)
+```
+
+## S&P 500 Index
+```{r}
+decomposed8 <- decompose(sp500_ts)
+autoplot(decomposed8, main = "Decomposition Plot for S&P 500 Index")  
+```  
+
+## U.S. Retail & Food Services Sales
+```{r}
+decomposed9 <- decompose(rsafs_ts)
+autoplot(decomposed9, main = "Decomposition Plot for U.S. Retail & Food Services Sales")  
+```
+:::
+
+Across all the data series, the decomposition plots are consistent with our earlier findings. They effectively illustrate the underlying trends, seasonal patterns, and the gradual weakening of past influences over time. These decompositions provide a clearer view of each series’ components—trend, seasonality, and residuals—further reinforcing our initial interpretation of the observed data patterns.
 
 # 4. ACF and PACF Plots
+
+::: {.panel-tabset}
+## Total TEUs
 ```{r}
+library(gridExtra)
 library(forecast)
 library(ggplot2)
-# use log data
-teu_log <- log(teu_m)
 
-# ACF
-ggAcf(teu_log) +
-  ggtitle("ACF of Log(TEUs)") +
+acf1 <- ggAcf(la_teu_ts) +
+  ggtitle("ACF Plot for Total TEUs") +
   theme_minimal()
 
-# PACF
-ggPacf(teu_log) +
-  ggtitle("PACF of Log(TEUs)") +
+pacf1 <- ggPacf(la_teu_ts) +
+  ggtitle("PACF Plot for Total TEUs") +
   theme_minimal()
+
+grid.arrange(acf1, pacf1, nrow = 2)
+```
+The ACF plot for Total TEUs shows a slow and gradual decay over time, with significant autocorrelations persisting across many lags. This indicates strong temporal dependence and the presence of long-term trends or seasonal components in the series. The PACF plot displays a sharp spike at lag 1, followed by a rapid decline and minor fluctuations around zero. Only the first lag is statistically significant, suggesting that the Total TEUs series is likely non-stationary and may follow an AR(1)-type process or exhibit a unit-root behavior.
+
+## Loaded Imports
+```{r}
+acf2 <- ggAcf(la_li_ts) +
+  ggtitle("ACF Plot for Loaded Imports") +
+  theme_minimal()
+
+pacf2 <- ggPacf(la_li_ts) +
+  ggtitle("PACF Plot for Loaded Imports") +
+  theme_minimal()
+
+grid.arrange(acf2, pacf2, nrow = 2)
 
 ```
-- The ACF decays slowly with significant values at multiple lags and clear seasonal spikes around lag 12, indicating trend and seasonality—the series is not weakly stationary yet.
+The ACF plot for Loaded Imports also exhibits a slow decay pattern, with strong positive autocorrelation that gradually decreases as the lag increases. This implies that past import volumes have a prolonged influence on current values. The PACF plot shows one major significant spike at lag 1, after which correlations become negligible. This pattern suggests the presence of a unit-root process, implying that the Loaded Imports series is non-stationary and may require differencing to achieve stationarity.
 
-- The PACF shows prominent spikes at low lags (≈1–3) that taper off, suggesting low-order AR effects; seasonal behavior is visible as well.
+## Loaded Exports
+```{r}
+acf3 <- ggAcf(la_le_ts) +
+  ggtitle("ACF Plot for Loaded Exports") +
+  theme_minimal()
+
+pacf3 <- ggPacf(la_le_ts) +
+  ggtitle("PACF Plot for Loaded Exports") +
+  theme_minimal()
+
+grid.arrange(acf3, pacf3, nrow = 2)
+```
+The ACF plot for Loaded Exports shows very high autocorrelation across all lags with a slow and almost linear decline, reflecting a persistent trend or seasonality in the data. The PACF plot exhibits a dominant spike at lag 1 and smaller, insignificant correlations thereafter. This combination of patterns indicates strong persistence and non-stationarity in the Loaded Exports series, possibly due to underlying growth trends or periodic variations.
+
+## Brent Crude Oil Price
+```{r}
+acf4 <- ggAcf(brent_ts) +
+  ggtitle("ACF Plot for Brent Crude Oil Price") +
+  theme_minimal()
+
+pacf4 <- ggPacf(brent_ts) +
+  ggtitle("PACF Plot for Brent Crude Oil Price") +
+  theme_minimal()
+
+grid.arrange(acf4, pacf4, nrow = 2)
+```
+The ACF plot for Brent Crude Oil Price shows a slow and persistent decay, with strong positive correlations across multiple lags. This pattern indicates that oil prices exhibit strong temporal dependence and a long-term trend component. The PACF plot presents a single dominant spike at lag 1, after which correlations quickly approach zero. This behavior suggests that the Brent Crude Oil Price series is non-stationary, likely driven by underlying trends or gradual adjustments in global energy markets.
+
+## U.S. Dollar Index
+```{r}
+acf5 <- ggAcf(usd_ts) +
+  ggtitle("ACF Plot for U.S. Dollar Index") +
+  theme_minimal()
+
+pacf5 <- ggPacf(usd_ts) +
+  ggtitle("PACF Plot for U.S. Dollar Index") +
+  theme_minimal()
+
+grid.arrange(acf5, pacf5, nrow = 2)
+```
+The ACF plot for the U.S. Dollar Index displays a gradually decaying pattern, with autocorrelations that remain positive for several lags before slowly diminishing. The PACF plot shows a significant spike at lag 1, followed by near-zero correlations afterward. This combination indicates that the Dollar Index is likely non-stationary, with potential trend persistence or inertia effects typical of macroeconomic indices.
+
+## Global Supply Chain Pressure Index
+```{r}
+acf6 <- ggAcf(gscpi_ts) +
+  ggtitle("ACF Plot for Global Supply Chain Pressure Index") +
+  theme_minimal()
+
+pacf6 <- ggPacf(gscpi_ts) +
+  ggtitle("PACF Plot for Global Supply Chain Pressure Index") +
+  theme_minimal()
+
+grid.arrange(acf6, pacf6, nrow = 2)  
+```
+The ACF plot for the Global Supply Chain Pressure Index demonstrates high autocorrelation at short lags that slowly declines across longer lags, implying a strong persistence in global supply chain dynamics. The PACF plot shows a dominant spike at lag 1 with the remaining lags insignificant, suggesting that the series is non-stationary and heavily influenced by global macroeconomic shocks that evolve gradually over time.
+
+## AHS Weighted Average Tariff
+```{r}
+acf7 <- ggAcf(ahs_ts) +
+  ggtitle("ACF Plot for AHS Weighted Average Tariff") +
+  theme_minimal()
+
+pacf7 <- ggPacf(ahs_ts) +
+  ggtitle("PACF Plot for AHS Weighted Average Tariff") +
+  theme_minimal()
+
+grid.arrange(acf7, pacf7, nrow = 2)  
+```
+The ACF plot for the AHS Weighted Average Tariff shows a sharp decline after the first lag, with only the first few lags being significant. The PACF plot mirrors this pattern with a strong spike at lag 1 and quickly diminishing correlations thereafter. This suggests that the tariff series is weakly persistent but relatively more stationary compared with other variables, indicating limited serial dependence and low long-term inertia.
+
+## S&P 500 Index
+```{r}
+acf8 <- ggAcf(sp500_ts) +
+  ggtitle("ACF Plot for S&P 500 Index") +
+  theme_minimal()
+
+pacf8 <- ggPacf(sp500_ts) +
+  ggtitle("PACF Plot for S&P 500 Index") +
+  theme_minimal()
+
+grid.arrange(acf8, pacf8, nrow = 2) 
+```
+The ACF plot for the S&P 500 Index shows a slow and gradual decay in autocorrelation values across lags, indicating strong persistence and trend behavior in the series. The autocorrelation remains positive for many lags before declining gradually toward zero. The PACF plot exhibits a single dominant spike at lag 1 followed by values close to zero, suggesting that the series is non-stationary and likely contains a unit root. Such patterns are typical of financial market indices that follow long-term trends with persistent autocorrelation structures.
+
+## U.S. Retail & Food Services Sales
+```{r}
+acf9 <- ggAcf(rsafs_ts) +
+  ggtitle("ACF Plot for U.S. Retail & Food Services Sales") +
+  theme_minimal()
+
+pacf9 <- ggPacf(rsafs_ts) +
+  ggtitle("PACF Plot for U.S. Retail & Food Services Sales") +
+  theme_minimal()
+
+grid.arrange(acf9, pacf9, nrow = 2) 
+```
+The ACF plot for U.S. Retail & Food Services Sales reveals a very slow decay of autocorrelation coefficients, remaining highly positive across many lags. This indicates strong persistence and a possible upward trend in the series over time. The PACF plot displays a single sharp spike at lag 1, after which values become insignificant. This pattern suggests that the series is non-stationary and likely requires differencing to remove trend and stabilize the variance before modeling.
+
+:::
+
+Overall, all nine variables exhibit strong and slowly decaying autocorrelations, as shown by their ACF plots, while the PACF plots generally display one dominant spike at lag 1 followed by rapid declines. This consistent pattern indicates that most of the series possess long-term persistence, trending behavior, or potential unit-root non-stationarity. Such characteristics are typical of macroeconomic and financial indicators that evolve gradually over time. To ensure reliable modeling and valid inference, these series should be transformed to achieve stationarity—commonly through differencing, detrending, or seasonal adjustment—before fitting ARIMA or other time-series models.
+
 
 # 5. Augmented Dickey-Fuller Test
+
+::: {.panel-tabset}
 ```{r}
-library(urca)
-
-tseries::adf.test(teu_log)
-
+library(tseries)
+adf.test(la_teu_ts)
 ```
-Based on the ADF test, the log-transformed TEUs series rejects the unit root hypothesis at the 1% significance level, indicating that it can be considered stationary.
-However, the ACF and PACF plots still exhibit strong autocorrelation and clear seasonal spikes.
 
-This suggests that, while the series is broadly stationary, applying first-order differencing or seasonal differencing (lag = 12) during the modeling stage may still be beneficial to improve model performance.
+## Loaded Imports
+```{r}
+adf.test(la_li_ts)
+```
+## Loaded Exports
+```{r}
+adf.test(la_le_ts)
+```
+
+## Brent Crude Oil Price
+```{r}
+adf.test(brent_ts)
+```
+## U.S. Dollar Index
+```{r}
+adf.test(usd_ts)
+```
+
+# Global Supply Chain Pressure Index
+```{r}
+adf.test(gscpi_ts)
+```
+
+## AHS Weighted Average Tariff
+```{r}
+adf.test(ahs_ts)
+```
+
+## S&P 500 Index
+```{r}
+adf.test(sp500_ts)
+```
+## U.S. Retail & Food Services Sales
+```{r}
+adf.test(rsafs_ts)
+```
+:::
+
+The ADF test results indicate that only Total TEUs, Loaded Imports, and AHS Weighted Average Tariff have p-values below 0.05, allowing us to conclude that these three series are stationary. In contrast, the other six variables — Loaded Exports, Brent Crude Oil Price, U.S. Dollar Index, Global Supply Chain Pressure Index, S&P 500 Index, and U.S. Retail & Food Services Sales — have p-values well above 0.05, meaning we fail to reject the null hypothesis. This suggests that these series are non-stationary, consistent with the strong persistence and slow-decaying autocorrelations observed in their ACF and PACF plots.
+
+Therefore, to achieve stationarity and enable reliable time-series modeling, differencing or detrending should be applied to the non-stationary variables before proceeding with further analysis.
 
 # 6. Differencing
+::: {.panel-tabset}
+
+## Total TEUs
+```{r}
+diff1_teu <- ggAcf(diff(la_teu_ts), 50, main="ACF of First Differencing")+ 
+           theme_minimal()
+
+diff2_teu <- ggAcf(diff(diff(la_teu_ts, lag=12)), 50, main="ACF of Seconal and Ordinary Differencing")+
+           theme_minimal()
+grid.arrange(diff1_teu, diff2_teu, nrow=2)
+```
+For the Total TEUs series, the ACF plot after the first differencing still exhibits noticeable seasonal autocorrelation at lag 12, suggesting that a seasonal pattern remains in the data. This indicates that first differencing alone is insufficient to achieve stationarity, and additional seasonal adjustment is required. After applying both seasonal and ordinary differencing, most ACF values fall within the confidence bounds, with only a few minor spikes remaining. This confirms that the combined differencing effectively removes both trend and seasonality, making the Total TEUs series approximately stationary and suitable for further time series modeling.
+
+
+## Loaded Imports
+```{r}
+# First differencing
+diff1_li <- ggAcf(diff(la_li_ts, differences = 1), lag.max = 50) +
+  ggtitle("ACF of First Differencing") +
+  theme_minimal()
+
+diff2_li <- ggAcf(diff(diff(la_li_ts, lag=12)), 50, main="ACF of Seconal and Ordinary Differencing")+
+           theme_minimal()
+
+grid.arrange(diff1_li, diff2_li, nrow=2)
+```
+For the Loaded Imports series, the ACF plot after the first differencing still shows visible seasonal autocorrelation at lag 12, indicating that a seasonal component remains in the data. This suggests that ordinary differencing alone does not fully achieve stationarity. After applying both seasonal and ordinary differencing, most ACF values fall within the confidence bounds and fluctuate randomly around zero, with only one or two small spikes remaining. This confirms that the combined differencing successfully removes both the trend and seasonality, making the Loaded Imports series approximately stationary and suitable for subsequent further time series modeling..
+
+
+## Loaded Exports
+```{r}
+# First differencing
+diff1_le <- ggAcf(diff(la_le_ts, differences = 1), lag.max = 50) +
+  ggtitle("ACF of First Differencing") +
+  theme_minimal()
+
+
+diff2_le <- ggAcf(diff(diff(la_le_ts, lag=12)), 50, main="ACF of Seconal and Ordinary Differencing")+
+           theme_minimal()
+
+grid.arrange(diff1_le, diff2_le, nrow=2)
+```
+For the Loaded Exports series, the ACF plot after the first differencing still shows visible autocorrelation around lag 12, indicating the presence of seasonal patterns that are not fully removed. This suggests that first differencing alone does not make the series stationary. After applying both seasonal and ordinary differencing, most of the autocorrelation values fall within the confidence bounds, and the overall pattern becomes more random, with only a few minor spikes remaining. This confirms that the combined differencing effectively eliminates the remaining trend and seasonal components, bringing the Loaded Exports series closer to stationarity and making it suitable for further time series modeling.
+
+## Brent Crude Oil Price
+```{r}
+# First differencing
+diff1_brent <- ggAcf(diff(brent_ts, differences = 1), lag.max = 50) +
+  ggtitle("ACF of First Differencing") +
+  theme_minimal()
+
+# Second differencing
+diff2_brent <- ggAcf(diff(brent_ts, differences = 2), lag.max = 50) +
+  ggtitle("ACF of Second Differencing") +
+  theme_minimal()
+
+# Combine the plots
+grid.arrange(diff1_brent, diff2_brent, nrow = 2)
+```
+For the Brent Crude Oil Price series, the ACF plot after the first differencing shows that most autocorrelation values fall within the confidence bounds, with no clear seasonal or long-term correlation remaining. This indicates that the first differencing successfully removes the trend and makes the series approximately stationary. The second differencing does not provide significant additional improvement, confirming that the first differencing is sufficient for achieving stationarity and preparing the data for further time series modeling.
+
+## U.S. Dollar Index
+```{r}
+# First differencing
+diff1_usd <- ggAcf(diff(usd_ts, differences = 1), lag.max = 50) +
+  ggtitle("ACF of First Differencing") +
+  theme_minimal()
+
+# Second differencing
+diff2_usd <- ggAcf(diff(usd_ts, differences = 2), lag.max = 50) +
+  ggtitle("ACF of Second Differencing") +
+  theme_minimal()
+
+# Combine the plots
+grid.arrange(diff1_usd, diff2_usd, nrow = 2)
+```
+For the U.S. Dollar Index series, the ACF plot after the first differencing shows that most autocorrelation values lie within the confidence bounds, and no significant seasonal or long-term correlation is observed. This indicates that the first differencing has effectively removed the trend and achieved approximate stationarity. The second differencing does not yield any meaningful improvement, confirming that one order of differencing is sufficient for stabilizing the U.S. Dollar Index series for further time series modeling.
+
+## Global Supply Chain Pressure Index
+```{r}
+ # First differencing
+diff1_gscpi <- ggAcf(diff(gscpi_ts, differences = 1), lag.max = 50) +
+  ggtitle("ACF of First Differencing") +
+  theme_minimal()
+
+# Second differencing
+diff2_gscpi <- ggAcf(diff(gscpi_ts, differences = 2), lag.max = 50) +
+  ggtitle("ACF of Second Differencing") +
+  theme_minimal()
+
+# Combine the plots
+grid.arrange(diff1_gscpi, diff2_gscpi, nrow = 2) 
+```
+For the Global Supply Chain Pressure Index series, the ACF plot after the first differencing shows that most autocorrelation values lie within the confidence bounds, and no significant seasonal or long-term correlation is observed. This indicates that the first differencing has effectively removed the trend and achieved approximate stationarity. The second differencing does not yield any meaningful improvement, confirming that one order of differencing is sufficient for stabilizing the Global Supply Chain Pressure Index series for further time series modeling.
+
+
+## AHS Weighted Average Tariff
+```{r}
+# First differencing
+diff1_ahs <- ggAcf(diff(ahs_ts, differences = 1), lag.max = 50) +
+  ggtitle("ACF of First Differencing") +
+  theme_minimal()
+
+# Second differencing
+diff2_ahs <- ggAcf(diff(ahs_ts, differences = 2), lag.max = 50) +
+  ggtitle("ACF of Second Differencing") +
+  theme_minimal()
+
+grid.arrange(diff1_ahs, diff2_ahs, nrow = 2) 
+```
+For the AHS Weighted Average Tariff series, the ACF plot after the first differencing shows that most autocorrelation values fall within the confidence bounds, suggesting that the series appears approximately stationary. However, the ADF test result indicates that the series only becomes statistically stationary after the second differencing. Therefore, although the visual inspection of the ACF plot suggests near-stationarity after the first differencing, the second differencing is required to ensure full stationarity for subsequent time series modeling.
+
+## S&P 500 Index
+```{r}
+# First differencing
+diff1_sp500 <- ggAcf(diff(sp500_ts, differences = 1), lag.max = 50) +
+  ggtitle("ACF of First Differencing") +
+  theme_minimal()
+
+# Second differencing
+diff2_sp500 <- ggAcf(diff(sp500_ts, differences = 2), lag.max = 50) +
+  ggtitle("ACF of Second Differencing") +
+  theme_minimal()
+
+# Combine the plots
+grid.arrange(diff1_sp500, diff2_sp500, nrow = 2) 
+```
+For the S&P 500 Index series, the ACF plot after the first differencing shows that most autocorrelation values fall within the confidence bounds, suggesting that the series appears approximately stationary. However, the ADF test result indicates that the series only becomes statistically stationary after the second differencing. Therefore, although the visual inspection of the ACF plot suggests near-stationarity after the first differencing, the second differencing is required to ensure full stationarity for subsequent time series modeling.
+
+## U.S. Retail & Food Services Sales
+```{r}
+# First differencing
+diff1_rsafs <- ggAcf(diff(rsafs_ts, differences = 1), lag.max = 50) +
+  ggtitle("ACF of First Differencing") +
+  theme_minimal()
+
+# Second differencing
+diff2_rsafs <- ggAcf(diff(rsafs_ts, differences = 2), lag.max = 50) +
+  ggtitle("ACF of Second Differencing") +
+  theme_minimal()
+
+# Combine the plots
+grid.arrange(diff1_rsafs, diff2_rsafs, nrow = 2) 
+```
+The ACF plots suggest that the U.S. Retail & Food Services Sales series achieves approximate stationarity after the first differencing. Most autocorrelation values fall within the confidence bounds, and no strong persistence or periodic structure remains. Applying a second differencing does not yield substantial improvement and may introduce unnecessary noise. Therefore, the first differencing is sufficient for achieving stationarity and suitable for subsequent time series modeling.
+
+:::
+
+# 8. ADF Test after Differencing
+
+::: {.panel-tabset}
+## Total TEUs
+```{r}
+adf.test(diff(diff(la_teu_ts, lag=12)))
+```
+## Loaded Imports
+```{r}
+adf.test(diff(diff(la_li_ts, lag=12)))
+```
+## Loaded Exports
+```{r}
+adf.test(diff(diff(la_le_ts, lag=12)))
+```
+## Brent Crude Oil Price
+```{r}
+adf.test(diff(brent_ts))
+```
+## U.S. Dollar Index
+```{r}
+adf.test(diff(usd_ts))
+```
+## Global Supply Chain Pressure Index
+```{r}
+adf.test(diff(gscpi_ts))
+```
+## AHS Weighted Average Tariff
+```{r}
+
+adf.test(diff(rsafs_ts, differences = 2))
+```
+## S&P 500 Index
+```{r}
+adf.test(diff(sp500_ts, differences = 2))
+```
+## U.S. Retail & Food Services Sales
+```{r}
+adf.test(diff(rsafs_ts))
+```
+:::
+
+The results align with expectations, as the p-values of the ADF tests for all differenced series are less than 0.05. This allows us to reject the null hypothesis of non-stationarity at the 5% significance level. Specifically, after applying the appropriate differencing — including first differencing for Brent Crude Oil Price, U.S. Dollar Index, and Global Supply Chain Pressure Index; seasonal and first differencing for Total TEUs, Loaded Imports, and Loaded Exports; and second differencing for S&P 500 Index and U.S. Retail & Food Services Sales — all time series have achieved stationarity. Therefore, the transformed datasets are now suitable for further time series modeling and analysis.
+
+# 8. Moving Average
+::: {.panel-tabset}
+## Total TEUs
 ```{r}
 library(forecast)
 library(ggplot2)
-library(gridExtra)
 
-teu_log <- log(teu_m)
-teu_diff1 <- diff(teu_log, differences = 1)
-
-p1 <- autoplot(teu_log) + ggtitle("Log(TEUs)")
-p2 <- autoplot(teu_diff1) + ggtitle("1st Difference of Log(TEUs)")
-
-grid.arrange(p1, p2, ncol=1)
-```
-
-The original log-transformed series still shows a clear upward trend, which violates the assumption of stationarity.After applying the first difference, the trend is largely removed, and the series fluctuates around zero.
-
-This makes the differenced series more suitable for time series modeling, as stationarity is a key assumption.
-
-```{r}
-# 1st difference of ACF
-acf_plot <- ggAcf(teu_diff1, lag.max = 36) +
-  ggtitle("ACF of 1st Difference of Log(TEUs)") +
+autoplot(la_teu_ts) +
+  autolayer(ma(la_teu_ts, 12), series = "12-MA") +
+  autolayer(ma(la_teu_ts, 24), series = "24-MA") +
+  autolayer(ma(la_teu_ts, 36), series = "36-MA") +
+  labs(title = "Total TEUs — Moving Average Smoothing", y = "Value", x = "Time") +
   theme_minimal()
-
-# 1st difference of PACF
-pacf_plot <- ggPacf(teu_diff1, lag.max = 36) +
-  ggtitle("PACF of 1st Difference of Log(TEUs)") +
-  theme_minimal()
-
-grid.arrange(acf_plot, pacf_plot, ncol = 2)
-tseries::adf.test(teu_diff1)
-
 ```
-
-# 7. Moving Average
+## Loaded Imports
 ```{r}
-library(forecast)
-library(ggplot2)
-
-autoplot(teu_log) +
-  autolayer(ma(teu_log, 3),  series = "MA-3 (Quarterly)") +   # quarter smooth
-  autolayer(ma(teu_log, 12), series = "MA-12 (Annual)") +     # annual smooth
-  autolayer(ma(teu_log, 24), series = "MA-24 (2-Year)") +     # 2 year smooth
-  labs(
-    title = "Moving Average Smoothing — log(TEUs)",
-    x = "Time", y = "log(TEUs)"
-  ) +
-  theme_minimal() +
-  guides(colour = guide_legend(title = "Series"))
+autoplot(la_li_ts) +
+  autolayer(ma(la_li_ts, 12), series = "12-MA") +
+  autolayer(ma(la_li_ts, 24), series = "24-MA") +
+  autolayer(ma(la_li_ts, 36), series = "36-MA") +
+  labs(title = "Loaded Imports — Moving Average Smoothing", y = "Value", x = "Time") +
+  theme_minimal()
 ```
-Overall, while the series shows strong seasonality and shocks (e.g., the dip during 2020 due to the pandemic), the long-term upward trend remains evident.
+
+## Loaded Exports
+```{r}
+autoplot(la_le_ts) +
+  autolayer(ma(la_le_ts, 12), series = "12-MA") +
+  autolayer(ma(la_le_ts, 24), series = "24-MA") +
+  autolayer(ma(la_le_ts, 36), series = "36-MA") +
+  labs(title = "Loaded Exports — Moving Average Smoothing", y = "Value", x = "Time") +
+  theme_minimal()
+```
+## Brent Crude Oil Price
+```{r}
+autoplot(brent_ts) +
+  autolayer(ma(brent_ts, 12), series = "12-MA") +
+  autolayer(ma(brent_ts, 24), series = "24-MA") +
+  autolayer(ma(brent_ts, 36), series = "36-MA") +
+  labs(title = "Brent Crude Oil Price — Moving Average Smoothing", y = "Value", x = "Time") +
+  theme_minimal()
+```
+## U.S. Dollar Index
+```{r}
+autoplot(usd_ts) +
+  autolayer(ma(usd_ts, 12), series = "12-MA") +
+  autolayer(ma(usd_ts, 24), series = "24-MA") +
+  autolayer(ma(usd_ts, 36), series = "36-MA") +
+  labs(title = "U.S. Dollar Index — Moving Average Smoothing", y = "Value", x = "Time") +
+  theme_minimal()
+```
+## Global Supply Chain Pressure Index
+```{r}
+autoplot(gscpi_ts) +
+  autolayer(ma(gscpi_ts, 12), series = "12-MA") +
+  autolayer(ma(gscpi_ts, 24), series = "24-MA") +
+  autolayer(ma(gscpi_ts, 36), series = "36-MA") +
+  labs(title = "Global Supply Chain Pressure Index — Moving Average Smoothing", y = "Value", x = "Time") +
+  theme_minimal()
+```
+
+## AHS Weighted Average Tariff
+```{r}
+autoplot(ahs_ts) +
+  autolayer(ma(ahs_ts, 3), series = "3-MA") +
+  autolayer(ma(ahs_ts, 5), series = "5-MA") +
+  labs(title = "AHS Weighted Average Tariff — Moving Average Smoothing", y = "Value", x = "Time") +
+  theme_minimal()
+```
+## S&P 500 Index
+```{r}
+autoplot(sp500_ts) +
+  autolayer(ma(sp500_ts, 12), series = "12-MA") +
+  autolayer(ma(sp500_ts, 24), series = "24-MA") +
+  autolayer(ma(sp500_ts, 36), series = "36-MA") +
+  labs(title = "S&P 500 Index — Moving Average Smoothing", y = "Value", x = "Time") +
+  theme_minimal()
+```
+## U.S. Retail & Food Services Sales
+```{r}
+autoplot(rsafs_ts) +
+  autolayer(ma(rsafs_ts, 12), series = "12-MA") +
+  autolayer(ma(rsafs_ts, 24), series = "24-MA") +
+  autolayer(ma(rsafs_ts, 36), series = "36-MA") +
+  labs(title = "Retail & Food Services Sales — Moving Average Smoothing", y = "Value", x = "Time") +
+  theme_minimal()
+```
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
 
 
