@@ -985,7 +985,7 @@ The ACF plots suggest that the U.S. Retail & Food Services Sales series achieves
 
 :::
 
-# 8. ADF Test after Differencing
+# 7. ADF Test after Differencing
 
 ::: {.panel-tabset}
 ## Total TEUs
