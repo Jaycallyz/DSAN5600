@@ -6518,14 +6518,14 @@ alternative hypothesis: stationary</code></pre>
 <div class="cell">
 <details class="code-fold">
 <summary>Code</summary>
-<div class="sourceCode cell-code" id="cb76"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb76-1"><a href="#cb76-1" aria-hidden="true" tabindex="-1"></a><span class="fu">adf.test</span>(<span class="fu">diff</span>(rsafs_ts, <span class="at">differences =</span> <span class="dv">2</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
+<div class="sourceCode cell-code" id="cb76"><pre class="sourceCode r code-with-copy"><code class="sourceCode r"><span id="cb76-1"><a href="#cb76-1" aria-hidden="true" tabindex="-1"></a><span class="fu">adf.test</span>(<span class="fu">diff</span>(ahs_ts, <span class="at">differences =</span> <span class="dv">2</span>))</span></code><button title="Copy to Clipboard" class="code-copy-button"><i class="bi"></i></button></pre></div>
 </details>
 <div class="cell-output cell-output-stdout">
 <pre><code>
     Augmented Dickey-Fuller Test
 
-data:  diff(rsafs_ts, differences = 2)
-Dickey-Fuller = -12.824, Lag order = 6, p-value = 0.01
+data:  diff(ahs_ts, differences = 2)
+Dickey-Fuller = -4.5253, Lag order = 2, p-value = 0.01
 alternative hypothesis: stationary</code></pre>
 </div>
 </div>

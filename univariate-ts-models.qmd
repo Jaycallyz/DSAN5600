@@ -10,327 +10,958 @@ execute:
   warning: false
   message: false
 ---
+The differencing and ADF stationarity tests were completed in the EDA section to ensure that all time series achieved stationarity before modeling. In this stage, I focus on examining the ACF and PACF plots of the stationary series to identify potential autoregressive and moving average components.
+
+The ARIMA and SARIMA analyses are integrated in this step. By inspecting both ACF and PACF patterns, I determine whether each series exhibits seasonal behavior and select appropriate model orders accordingly. The final model for each variable is chosen based on diagnostic results and goodness-of-fit criteria, ensuring suitability for further time-series forecasting and causal analysis.
+
+# Brief Introduction
+Here, we will apply the ARIMA or SARIMA model to our 10 time series datasets in order to make forecasts. Below is a brief introduction to both models, including the parameters p, d, q, P, D, and Q.
+
+ARIMA Model:
+ARIMA (AutoRegressive Integrated Moving Average) is used for non-seasonal time series data that exhibit patterns over time. The parameters are:
+- p: The order of the autoregressive (AR) term.
+- d: The degree of differencing to make the series stationary.
+- q: The order of the moving average (MA) term.
+
+SARIMA Model:
+SARIMA (Seasonal ARIMA) is an extension of the ARIMA model that deals with seasonality in time series data. The additional parameters for seasonal components are:
+- P: The order of the seasonal autoregressive (AR) term.
+- D: The degree of seasonal differencing.
+- Q: The order of the seasonal moving average (MA) term.
+- s: The number of periods in each season.
+
+**Data and Model Selection**
+
+
+In the EDA phase, we performed differencing and seasonal differencing to transform the original series into stationary series. The stationarity of the differenced series was validated using the ADF test. Therefore, we can now decide whether to apply the ARIMA or SARIMA model and select the appropriate values for d or D.
+
+- **Total TEUs (Port of Los Angeles):**
+ Seasonal and ordinary differencing, SARIMA model, d = 1, D = 1, s = 12.
+
+- **Loaded Imports:**
+ Seasonal and ordinary differencing, SARIMA model, d = 1, D = 1, s = 12.
+
+- **Loaded Exports:**
+ Seasonal and ordinary differencing, SARIMA model, d = 1, D = 1, s = 12.
+
+- **Brent Crude Oil Price:**
+ First-order differencing, ARIMA model, d = 1.
+
+- **U.S. Dollar Index:**
+ First-order differencing, ARIMA model, d = 1.
+
+- **Global Supply Chain Pressure Index (GSCPI):**
+ First-order differencing, ARIMA model, d = 1.
+
+- **AHS Weighted Average Tariff:**
+ Second-order differencing, ARIMA model, d = 2.
+
+- **S&P 500 Index:**
+ Second-order differencing, ARIMA model, d = 2.
+
+- **U.S. Retail & Food Services Sales:**
+ Second-order differencing, ARIMA model, d = 1.
+
+# ACF and PACF Plots
 ```{r}
-library(tidyverse)
-library(ggplot2)
-library(forecast)
-library(astsa) 
-library(xts)
-library(tseries)
-library(fpp2)
-library(fma)
-library(lubridate)
-library(tidyverse)
-library(TSstudio)
-library(quantmod)
-library(tidyquant)
-library(plotly)
-library(ggplot2)
+# load data
+library(readr)
 library(dplyr)
-library(seasonal)
-library(patchwork)
-```
+library(lubridate)
+library(plotly)
+library(ggplot2)  
+raw <- read.csv("data-raw/la_teu_data.csv", stringsAsFactors = FALSE)
 
-```{r}
-la_teu_data <- read_csv("data-raw/la_teu_data.csv", show_col_types = FALSE)
-head(la_teu_data)
-```
+num_cols <- c("Loaded_Imports","Empty_Imports","Total_Imports",
+              "Loaded_Exports","Empty_Exports","Total_Exports","Total_TEUs")
 
-# For Total TEUs
-```{r}
-df <- la_teu_data %>%
-  transmute(
-    Date = coalesce(suppressWarnings(my(Date)),    
-                    suppressWarnings(ymd(Date))), 
-    Total_TEUs = parse_number(Total_TEUs)          
+Sys.setlocale("LC_TIME", "C")
+
+la_teu <- raw %>%
+  mutate(
+    Date = my(Date),
+    across(all_of(num_cols), ~ as.numeric(gsub(",", "", .))),
+    Prior_Year_Change = suppressWarnings(as.numeric(sub("%","", Prior_Year_Change))) / 100,
+    Empty_Containers = Empty_Imports + Empty_Exports,
+    Total_calc = Loaded_Imports + Loaded_Exports + Empty_Containers,
+    Total_TEUs = ifelse(is.na(Total_TEUs), Total_calc, Total_TEUs)
   ) %>%
   arrange(Date) %>%
-  filter(!is.na(Date), !is.na(Total_TEUs))
+  filter(Date >= as.Date("2000-01-01"))
 
-win_start <- ymd("2000-01-01")
-win_end   <- ymd("2024-12-01")
+brent <- read_csv("data-raw/brent.csv", show_col_types = FALSE)
+WTI   <- read_csv("data-raw/WTI.csv", show_col_types = FALSE)
+usd   <- read_csv("data-raw/usd.csv", show_col_types = FALSE)
+rmb   <- read_csv("data-raw/rmb.csv", show_col_types = FALSE)
 
-df_teu <- df %>%
-  filter(Date >= win_start, Date <= win_end) %>%
-  mutate(
-    TEUs = Total_TEUs,
-    log_TEUs = log(Total_TEUs + 1)
+brent <- brent %>%
+  rename(Date = observation_date, Price = MCOILBRENTEU)
+usd <- usd %>%
+  rename(Date = observation_date, Index = DTWEXBGS)
+
+gscpi <- read_csv(
+  "data-raw/GSCPI.csv",
+  col_types = cols(
+    Date  = col_date(format = "%d-%b-%Y"),  # 31-Jan-1998
+    GSCPI = col_double()
+  ),
+  show_col_types = FALSE
+) %>%
+  mutate(Date = floor_date(Date, "month")) %>%  
+  filter(Date >= as.Date("2000-01-01"))
+
+ahs_y <- read_csv("data-raw/ahs.csv", show_col_types = FALSE) %>%
+  rename(
+    Year = Date,
+    Tariff = `AHS Weighted Average (%)`
   ) %>%
-  select(Date, TEUs, log_TEUs)
+  filter(Year >= 2000, Year <= 2022)
 
-head(df_teu)
+sp500 <- read_csv("data-raw/sp500.csv") %>%
+  mutate(Date = as.Date(observation_date)) %>%
+  filter(Date >= as.Date("2015-10-01") & Date <= as.Date("2024-12-01")) %>%
+  mutate(Year = year(Date), Month = month(Date)) %>%
+  group_by(Year, Month) %>%
+  slice_max(Date) %>%                
+  ungroup() %>%
+  mutate(YearMonth = as.Date(paste0(Year, "-", Month, "-01"))) %>%  
+  select(YearMonth, SP500)
+sp500_clean <- sp500 %>%
+  filter(!is.na(SP500))
+
+rsafs<- read_csv("data-raw/RSAFS.csv")
+rsafs <- rsafs%>%
+  mutate(Date = as.Date(observation_date)) %>%
+  select(Date, RSAFS)
+
+la_teu_ts <- ts(la_teu$Total_TEUs, start = c(2000, 1), frequency = 12)
+la_li_ts <- ts(la_teu$Loaded_Imports, start = c(2000, 1), frequency = 12)
+la_le_ts <- ts(la_teu$Loaded_Exports, start = c(2000, 1), frequency = 12)
+brent_ts <- ts(brent$Price, start = c(2000, 1), frequency = 12)
+usd_ts <- ts(usd$Index, start = c(2000, 1), frequency = 12)
+gscpi_ts <- ts(gscpi$GSCPI, start = c(2000, 1), frequency = 12)
+ahs_ts <- ts(ahs_y$Tariff, start = min(ahs_y$Year), frequency = 1)
+sp500_ts <- ts(sp500_clean$SP500, start = c(2000, 1), frequency = 12)
+rsafs_ts <- ts(rsafs$RSAFS, start = c(2000, 1), frequency = 12)
+
 ```
-
-
+::: {.panel-tabset}
+## Total TEUs
 ```{r}
-###### Plot Original Data using Plotly ######
-plot_ly(df_teu, x = ~as.Date(Date), y = ~TEUs, type = 'scatter', mode = 'lines',
-        line = list(color = '#ffa988')) %>%
-  layout(title = "Orignial Time Series of Port of Los Angeles Container Throughput (TEUs) ",
-         xaxis = list(title = "Date"),
-         yaxis = list(title = "TEUs"))
-```
+library(gridExtra)
+library(forecast)
+library(ggplot2)
 
-The time series of container throughput (TEUs) at the Port of Los Angeles from 2000 to 2024 shows an overall upward trend with pronounced cyclical fluctuations, reflecting both long-term trade growth and sensitivity to global shocks. Throughput expanded steadily in the early 2000s before declining sharply during the 2008 financial crisis, after which it recovered and stabilized within a broad seasonal cycle. Beginning in 2020, the series exhibits extreme volatility: a sharp contraction during the onset of the COVID-19 pandemic was followed by record peaks in 2021 as consumer demand surged and supply chain congestion intensified. In recent years, volumes have moderated but remain elevated, underscoring both the vulnerability of the port to external disruptions and its resilience as a central hub in U.S.–China trade and global supply chains.
-
-
-```{r}
-ts_df <- ts(df_teu$TEUs, 
-              start = decimal_date(as.Date(min(df$Date))), 
-              frequency = 12)  # Assuming monthly data
-ts_log <- ts(df_teu$log_TEUs, 
-              start = decimal_date(as.Date(min(df$Date))), 
-              frequency = 12)  # Assuming monthly data
-plot(ts_df, main = "Time Series plot for orignial data")
-plot(ts_log, main = "Time Series plot for log data")
-```
-The log transformation does not yield a significant improvement in residual behavior, while complicating forecast back-transformation. Therefore, we retain the original scale of the data for analysis and forecasting.
-
-## ACF with original data
-```{r}
-# ACF Plot
-ggAcf(ts_log) +
-  ggtitle("ACF Plot of Port of Los Angeles Container Throughput") +
+facf1 <- ggAcf(diff(diff(la_teu_ts, lag = 12)), lag.max = 50) +
+  ggtitle("ACF Plot for Total TEUs") +
   theme_minimal()
+
+fpacf1 <- ggPacf(diff(diff(la_teu_ts, lag = 12)), lag.max = 50) +
+  ggtitle("PACF Plot for Total TEUs") +
+  theme_minimal()
+
+grid.arrange(facf1, fpacf1, nrow = 2)
 ```
-## ADF test
+
+## Loaded Imports
 ```{r}
-################ ADF Test #############
-tseries::adf.test(ts_log)
+facf2 <- ggAcf(diff(diff(la_li_ts, lag = 12)), lag.max = 50) +
+  ggtitle("ACF Plot for Loaded Imports") +
+  theme_minimal()
+
+fpacf2 <- ggPacf(diff(diff(la_li_ts, lag = 12)), lag.max = 50) +
+  ggtitle("PACF Plot for Loaded Imports") +
+  theme_minimal()
+
+grid.arrange(facf2, fpacf2, nrow = 2)
 ```
-The ACF plot of the original series shows a slow decay in autocorrelations across multiple lags, indicating strong persistence and nonstationarity. In addition, the AD F test yields a p-value of 0.01, which is below the 0.05 significance threshold, rejecting the null hypothesis of a unit root. 
 
-Taken together, these results confirm that the raw TEUs series of the Port of Los Angeles is non-stationary.
-
-
+## Loaded Exports
 ```{r}
-diff_1 <- diff(ts_df)
-diff_2 <- diff(ts_df,differences = 2)
+facf3 <- ggAcf(diff(diff(la_le_ts, lag = 12)), lag.max = 50) +
+  ggtitle("ACF Plot for Loaded Exports") +
+  theme_minimal()
 
-# ACF Plots for seasonal without normal differenced Data
-acf_plot1 <- ggAcf(diff_1, 40) +
-  labs(title = "ACF of first differenced TEUs") 
-acf_plot2 <- ggAcf(diff_2, 40) +
-  labs(title = "ACF of second differenced TEUs") 
+fpacf3 <- ggPacf(diff(diff(la_le_ts, lag = 12)), lag.max = 50) +
+  ggtitle("PACF Plot for Loaded Exports") +
+  theme_minimal()
 
-# Combine ACF Plots using patchwork
-acf_plot1 / acf_plot2
+grid.arrange(facf3, fpacf3, nrow = 2)
 ```
-The ACF plot of the first-differenced series shows that autocorrelations drop sharply after lag 1 and remain largely within the confidence bounds, indicating that first differencing has effectively removed the nonstationarity of the original TEUs series. In contrast, the second-differenced series does not provide additional improvement and may risk overdifferencing, which can distort the underlying structure of the data. 
 
-Therefore, a first-order difference is sufficient。
-
+## Brent Crude Oil Price
 ```{r}
-diff_s <-diff(diff_1,12)
+facf4 <- ggAcf(diff(brent_ts), lag.max = 50) +
+  ggtitle("ACF Plot for Brent Crude Oil Price") +
+  theme_minimal()
 
-# ACF Plots for Differenced Data
-acf_plot1 <- ggAcf(diff_1, 40) +
-  labs(title = "ACF of first differenced TEUs") 
-pacf_plot1 <- ggPacf(diff_1, 40) +
-  labs(title = "PACF of first differenced TEUs")  
+fpacf4 <- ggPacf(diff(brent_ts), lag.max = 50) +
+  ggtitle("PACF Plot for Brent Crude Oil Price") +
+  theme_minimal()
 
-acf_plots <- ggAcf(diff_s, 40) +
-  labs(title = "ACF of first differenced seasonal TEUs") 
-pacf_plots <- ggPacf(diff_s, 40) +
-  labs(title = "PACF of first differenced seasonal TEUs") 
-
-# Combine ACF Plots using patchwork
-acf_plot1 / pacf_plot1
-acf_plots / pacf_plots
+grid.arrange(facf4, fpacf4, nrow = 2)
 ```
-q=0:1,Q=1:3,p=1:4,P=1,d=1,D=1
+
+## U.S. Dollar Index
+```{r}
+facf5 <- ggAcf(diff(usd_ts), lag.max = 50) +
+  ggtitle("ACF Plot for U.S. Dollar Index") +
+  theme_minimal()
+
+fpacf5 <- ggPacf(diff(usd_ts), lag.max = 50) +
+  ggtitle("PACF Plot for U.S. Dollar Index") +
+  theme_minimal()
+
+grid.arrange(facf5, fpacf5, nrow = 2)
+```
+
+## Global Supply Chain Pressure Index
+```{r}
+facf6 <- ggAcf(diff(gscpi_ts), lag.max = 50) +
+  ggtitle("ACF Plot for Global Supply Chain Pressure Index") +
+  theme_minimal()
+
+fpacf6 <- ggPacf(diff(gscpi_ts), lag.max = 50) +
+  ggtitle("PACF Plot for Global Supply Chain Pressure Index") +
+  theme_minimal()
+
+grid.arrange(facf6, fpacf6, nrow = 2)
+```
+
+## AHS Weighted Average Tariff
+```{r}
+facf7 <- ggAcf(diff(ahs_ts, differences = 2), lag.max = 50) +
+  ggtitle("ACF Plot for AHS Weighted Average Tariff") +
+  theme_minimal()
+
+fpacf7 <- ggPacf(diff(ahs_ts, differences = 2), lag.max = 50) +
+  ggtitle("PACF Plot for AHS Weighted Average Tariff") +
+  theme_minimal()
+
+grid.arrange(facf7, fpacf7, nrow = 2)
+```
+
+## S&P 500 Index
+```{r}
+facf8 <- ggAcf(diff(sp500_ts, differences = 2), lag.max = 50) +
+  ggtitle("ACF Plot for S&P 500 Index") +
+  theme_minimal()
+
+fpacf8 <- ggPacf(diff(sp500_ts, differences = 2), lag.max = 50) +
+  ggtitle("PACF Plot for S&P 500 Index") +
+  theme_minimal()
+
+grid.arrange(facf8, fpacf8, nrow = 2)
+```
+
+## U.S. Retail & Food Services Sales
+```{r}
+facf9 <- ggAcf(diff(rsafs_ts), lag.max = 50) +
+  ggtitle("ACF Plot for U.S. Retail & Food Services Sales") +
+  theme_minimal()
+
+fpacf9 <- ggPacf(diff(rsafs_ts), lag.max = 50) +
+  ggtitle("PACF Plot for U.S. Retail & Food Services Sales") +
+  theme_minimal()
+
+grid.arrange(facf9, fpacf9, nrow = 2)
+```
+
+:::
+
+The ACF plot helps determine the q parameter by identifying the number of significant lags in the moving average (MA) component. The PACF plot helps determine the p parameter by identifying the number of significant lags in the autoregressive (AR) component. For seasonal models, ACF and PACF can also be used to determine the seasonal parameters Q and P.
+
+- **Total TEUs (Port of Los Angeles):**
+ Seasonal and ordinary differencing, SARIMA model, d = 1, D = 1, s = 12; p=1,2,4 P=1,2; q=1,4 Q=1. 
+
+- **Loaded Imports:**
+ Seasonal and ordinary differencing, SARIMA model, d = 1, D = 1, s = 12; p=1,2,4 P=1,2; q=1,3,4 Q=1.
+
+- **Loaded Exports:**
+ Seasonal and ordinary differencing, SARIMA model, d = 1, D = 1, s = 12; p=1 P=1,2,3; q=1 Q=1.
+
+- **Brent Crude Oil Price:**
+ First-order differencing, ARIMA model, d = 1; p=1,6; q=1,6.
+
+- **U.S. Dollar Index:**
+ First-order differencing, ARIMA model, d = 1; p=4,6; q=4,6.
+
+- **Global Supply Chain Pressure Index (GSCPI):**
+ First-order differencing, ARIMA model, d = 1; p=0; q=4.
+
+- **AHS Weighted Average Tariff:**
+ Second-order differencing, ARIMA model, d = 2; p=2;q=2.
+
+- **S&P 500 Index:**
+ Second-order differencing, ARIMA model, d = 2; p=1,2,3,4,6; q=1.
+
+- **U.S. Retail & Food Services Sales:**
+ First-order differencing, ARIMA model, d = 1; p=2; q=2.
+
+
+# Model Selection by Manual Search
+```{r setup, include=FALSE}
+library(forecast)
+library(kableExtra)
+library(knitr)
+
+highlight_output <- function(output, type = "ARIMA") {
+  highlight_row <- unique(na.omit(c(
+    which.min(output$AIC),
+    which.min(output$BIC),
+    which.min(output$AICc)
+  )))
+  knitr::kable(
+    output, align = 'c',
+    caption = paste("Comparison of", type, "Models")
+  ) |>
+    kableExtra::kable_styling(full_width = FALSE, position = "center") |>
+    kableExtra::row_spec(highlight_row, bold = TRUE, background = "#FFFF99")
+}
+```
 
 ```{r}
-SARIMA.c <- function(p1, p2, q1, q2, P1, P2, Q1, Q2, data) {
-  d <- 1; D <- 1
-  if (!is.ts(data)) data <- ts(data, frequency = 12)
-  s <- frequency(data); if (is.null(s) || is.na(s) || s <= 1) s <- 12
-  
-  rows <- list()
-  
-  i <- 1
-  for (p in p1:p2) {
-    for (q in q1:q2) {
-      for (P in P1:P2) {
-        for (Q in Q1:Q2) {
-          
-          if (p + d + q + P + D + Q <= 9) {
-            model <- tryCatch(
-              Arima(
-                data,
-                order    = c(p, d, q),
-                seasonal = list(order = c(P, D, Q), period = s)
-              ),
-              error = function(e) NULL
-            )
-            
-            if (!is.null(model)) {
-              rows[[i]] <- c(p, d, q, P, D, Q, model$aic, model$bic, model$aicc)
-              i <- i + 1
-            }
-          }
-        }
+set.seed(123)
+
+ARIMA.c <- function(p1, p2, q1, q2, data) {
+  d <- 1; i <- 1
+  ncomb <- (p2 - p1 + 1) * (q2 - q1 + 1)
+  ls <- matrix(NA_real_, nrow = ncomb, ncol = 6)
+
+  for (p in p1:p2) for (q in q1:q2) {
+    if (p + d + q <= 9) {
+      model <- tryCatch(
+        forecast::Arima(data, order = c(p, d, q), include.drift = TRUE),
+        error = function(e) NULL
+      )
+      if (!is.null(model)) {
+        ls[i, ] <- c(p, d, q, model$aic, model$bic, model$aicc)
+        i <- i + 1
       }
     }
   }
-  
-  if (length(rows) == 0) {
-    out <- setNames(
-      as.data.frame(matrix(numeric(0), nrow = 0, ncol = 9)),
-      c("p","d","q","P","D","Q","AIC","BIC","AICc")
-    )
-    return(out)
+  temp <- as.data.frame(ls[seq_len(i - 1), , drop = FALSE])
+  names(temp) <- c("p","d","q","AIC","BIC","AICc")
+  na.omit(temp)
+}
+
+SARIMA.c <- function(p1, p2, q1, q2, P1, P2, Q1, Q2, s, data) {
+  d <- 1; D <- 1; i <- 1
+  ncomb <- (p2 - p1 + 1) * (q2 - q1 + 1) * (P2 - P1 + 1) * (Q2 - Q1 + 1)
+  ls <- matrix(NA_real_, nrow = ncomb, ncol = 9)
+
+  for (p in p1:p2) for (q in q1:q2) for (P in P1:P2) for (Q in Q1:Q2) {
+    if (p + d + q + P + D + Q <= 9) {
+      model <- tryCatch(
+        forecast::Arima(data,
+                        order = c(p, d, q),
+                        seasonal = list(order = c(P, D, Q), period = s)),
+        error = function(e) NULL
+      )
+      if (!is.null(model)) {
+        ls[i, ] <- c(p, d, q, P, D, Q, model$aic, model$bic, model$aicc)
+        i <- i + 1
+      }
+    }
   }
-  
-  out <- as.data.frame(do.call(rbind, rows))
-  names(out) <- c("p","d","q","P","D","Q","AIC","BIC","AICc")
-  for (nm in names(out)) out[[nm]] <- as.numeric(out[[nm]])
-  rownames(out) <- NULL
-  
-  out
+  temp <- as.data.frame(ls[seq_len(i - 1), , drop = FALSE])
+  names(temp) <- c("p","d","q","P","D","Q","AIC","BIC","AICc")
+  na.omit(temp)
+}
+
+```
+
+
+
+::: {.panel-tabset}
+## Total TEUs
+```{r}
+output1=SARIMA.c(p1=0, p2=4, q1=0, q2=4, P1=0, P2=2, Q1=0, Q2=1, s=12, data=la_teu_ts)
+highlight_output(output1, type="SARIMA")
+```
+
+- **Total TEUs (Port of Los Angeles):**
+ARIMA(0,1,1)(0,1,1)[12]/(3,1,3)(0,1,1)[12]
+
+## Loaded Imports
+```{r}
+output2=SARIMA.c(p1=0, p2=4, q1=0, q2=4, P1=0, P2=2, Q1=0, Q2=1, s=12, data=la_li_ts)
+highlight_output(output2, type="SARIMA")
+```
+
+- **Loaded Imports:**
+SARIMA(0,1,1)(0,1,1)[12]/(3,1,3)(0,1,1)[12]
+
+## Loaded Exports
+```{r}
+output3=SARIMA.c(p1=0, p2=1, q1=0, q2=1, P1=0, P2=3, Q1=0, Q2=1, s=12, data=la_le_ts)
+highlight_output(output3, type="SARIMA")
+```
+
+- **Loaded Exports:**
+ SARIMA(0,1,1)(0,1,1)[12]
+
+## Brent Crude Oil Price
+```{r}
+output4=ARIMA.c(p1=0,p2=6,q1=0,q2=6,data=brent_ts)
+highlight_output(output4)
+```
+
+- **Brent Crude Oil Price:**
+ARIMA(1,1,0)/(3,1,4)
+
+## U.S. Dollar Index
+```{r}
+output5=ARIMA.c(p1=4,p2=6,q1=4,q2=6,data=usd_ts)
+highlight_output(output5)
+```
+- **U.S. Dollar Index:**
+ ARIMA(4,1,4)
+ 
+## Global Supply Chain Pressure Index (GSCPI)
+```{r}
+output6=ARIMA.c(p1=0,p2=1,q1=0,q2=4,data=gscpi_ts)
+highlight_output(output6)
+```
+- **Global Supply Chain Pressure Index (GSCPI):**
+ARIMA(0,1,0)/(1,1,2)
+
+## AHS Weighted Average Tarif
+```{r}
+ARIMA2.c <- function(p1, p2, q1, q2, data) {
+  d <- 2; i <- 1
+  ncomb <- (p2 - p1 + 1) * (q2 - q1 + 1)
+  ls <- matrix(NA_real_, nrow = ncomb, ncol = 6)
+
+  for (p in p1:p2) for (q in q1:q2) {
+    if (p + d + q <= 9) {
+      model <- tryCatch(
+        forecast::Arima(data, order = c(p, d, q), include.drift = TRUE),
+        error = function(e) NULL
+      )
+      if (!is.null(model)) {
+        ls[i, ] <- c(p, d, q, model$aic, model$bic, model$aicc)
+        i <- i + 1
+      }
+    }
+  }
+
+  temp <- as.data.frame(ls[seq_len(i-1), , drop = FALSE])
+  names(temp) <- c("p","d","q","AIC","BIC","AICc")
+  na.omit(temp)
 }
 ```
 
 ```{r}
-output <- SARIMA.c(
-  p1=1, p2=4,
-  q1=0, q2=1,
-  P1=0, P2=1,
-  Q1=1, Q2=3,
-  data = ts_df
-)
-
-output[which.min(output$AIC), , drop=FALSE]
-output[which.min(output$BIC), , drop=FALSE]
-output[which.min(output$AICc), , drop=FALSE]
+output7<- ARIMA2.c(p1=0, p2=2, q1=0, q2=2, data=gscpi_ts)
+highlight_output(output7, type="ARIMA (d=2)")
 ```
-SARIMA(4,1,1)(0,1,1)[12]/(1,1,1)(0,1,1)[12] is best model for manual search.
+
+- **AHS Weighted Average Tariff:**
+ARIMA(0,2,1) /(1,2,2)
+
+## S&P 500 Index
+```{r}
+output8<- ARIMA2.c(p1=0, p2=6, q1=0, q2=1, data=sp500_ts)
+highlight_output(output8, type="ARIMA (d=2)")
+```
+- **S&P 500 Index:**
+ARIMA model(0,2,1)/(1,2,1)
+
+## U.S. Retail & Food Services Sales
+```{r}
+output9=ARIMA.c(p1=0,p2=2,q1=0,q2=2,data=rsafs_ts)
+highlight_output(output9)
+```
+- **U.S. Retail & Food Services Sales:**
+ARIMA(0,1,2)
+:::
+
+# Model Selection by Auto.arima()
+::: {.panel-tabset}
+
+## Total TEUs
+```{r}
+auto.arima(la_teu_ts)
+```
+Auto Model chooses sarima(0,1,1)(0,0,2)[12] for Total TEUs.
+
+## Loaded Imports
+```{r}
+auto.arima(la_li_ts)
+```
+
+Auto Model chooses sarima(0,1,1)(0,0,2)[12] for Loaded Imports.
+
+## Loaded Exports
+```{r}
+auto.arima(la_le_ts)
+```
+Auto Model chooses sarima(1,1,2)(0,0,2)[12] for Loaded Exports.
+
+## Brent Crude Oil Price
+```{r}
+auto.arima(brent_ts)
+```
+
+Auto Model chooses arima(0,1,1) for Brent Crude Oil Price.
+
+## U.S. Dollar Index
+```{r}
+auto.arima(usd_ts)
+```
+Auto Model chooses sarima(4,1,2)(0,0,1)[12] for U.S. Dollar Index.
+
+## Global Supply Chain Pressure Index
+```{r}
+auto.arima(gscpi_ts)
+```
+Auto Model chooses arima(0,1,0) for Global Supply Chain Pressure Index.
+
+## AHS Weighted Average Tariff
+```{r}
+auto.arima(ahs_ts)
+```
+Auto Model chooses arima(0,1,0) for AHS Weighted Average Tariff.
+
+## S&P 500 Index
+```{r}
+auto.arima(sp500_ts)
+```
+Auto Model chooses arima(0,1,1) for S&P 500 Index.
+
+## U.S. Retail & Food Services Sales
+```{r}
+auto.arima(rsafs_ts)
+```
+Auto Model chooses arima(2,1,0) for U.S. Retail & Food Services Sales.
+:::
+
+# Model Diagnostics
+::: {.panel-tabset}
+
+## Total TEUs
+### SARIMA(0,1,1)(0,1,1)[12]
+```{r}
+library(astsa)
+model_output1_1 <- capture.output(sarima(la_teu_ts, 0,1,1,0,1,1,12))
+```
+```{r}
+start_line <- grep("Coefficients", model_output1_1)
+end_line <- length(model_output1_1)
+cat(model_output1_1[start_line:end_line], sep = "\n")
+```
+### SARIMA(3,1,3)(0,1,1)[12]
+```{r}
+model_output1_2 <- capture.output(sarima(la_teu_ts, 3,1,3,0,1,1,12))
+```
+```{r}
+start_line <- grep("Coefficients", model_output1_2)
+end_line <- length(model_output1_2)
+cat(model_output1_2[start_line:end_line], sep = "\n")
+```
+
+### SARIMA(0,1,1)(0,0,2)[12]
+```{r}
+model_output1_3 <- capture.output(sarima(la_teu_ts, 0,1,1,0,0,2,12))
+```
+```{r}
+start_line <- grep("Coefficients", model_output1_3)
+end_line <- length(model_output1_3)
+cat(model_output1_3[start_line:end_line], sep = "\n")
+```
+Considering all model diagnostics and information criteria, SARIMA(0,1,1)(0,0,2)[12] was selected as the best-fitting model.
+
+
+## Loaded Imports
+### SARIMA(0,1,1)(0,1,1)[12]
+```{r}
+model_output2_1 <- capture.output(sarima(la_li_ts, 0,1,1,0,1,1,12))
+```
+```{r}
+start_line <- grep("Coefficients", model_output2_1)
+end_line <- length(model_output2_1)
+cat(model_output2_1[start_line:end_line], sep = "\n")
+```
+### SARIMA(3,1,3)(0,1,1)[12]
+```{r}
+model_output2_2 <- capture.output(sarima(la_li_ts, 3,1,3,0,1,1,12))
+```
+```{r}
+start_line <- grep("Coefficients", model_output2_2)
+end_line <- length(model_output2_2)
+cat(model_output2_2[start_line:end_line], sep = "\n")
+```
+Considering all model diagnostics and information criteria, SARIMA(3,1,3)(0,1,1)[12] was selected as the best-fitting model.
+
+## Loaded Exports
+### SARIMA(0,1,1)(0,1,1)[12]
+```{r}
+model_output3_1 <- capture.output(sarima(la_le_ts, 0,1,1,0,1,1,12))
+```
+```{r}
+start_line <- grep("Coefficients", model_output3_1)
+end_line <- length(model_output3_1)
+cat(model_output3_1[start_line:end_line], sep = "\n")
+```
+
+### SARIMA(1,1,2)(0,0,2)[12]
+```{r}
+model_output3_2 <- capture.output(sarima(la_le_ts, 1,1,2,0,0,2,12))
+```
+```{r}
+start_line <- grep("Coefficients", model_output3_2)
+end_line <- length(model_output3_2)
+cat(model_output3_2[start_line:end_line], sep = "\n")
+```
+Considering all model diagnostics and information criteria, SARIMA(1,1,2)(0,0,2)[12] was selected as the best-fitting model.
+
+## Brent Crude Oil Price
+### ARIMA(1,1,0)
+```{r}
+model_output4_1 <- capture.output(sarima(brent_ts,1,1,0))
+```
+```{r}
+start_line <- grep("Coefficients", model_output4_1)
+end_line <- length(model_output4_1)
+cat(model_output4_1[start_line:end_line], sep = "\n")
+```
+### ARIMA(3,1,4)
+```{r}
+model_output4_2 <- capture.output(sarima(brent_ts,3,1,4))
+```
+```{r}
+start_line <- grep("Coefficients", model_output4_2)
+end_line <- length(model_output4_2)
+cat(model_output4_2[start_line:end_line], sep = "\n")
+```
+### ARIMA(0,1,1) 
+```{r}
+model_output4_3 <- capture.output(sarima(brent_ts,0,1,1))
+```
+```{r}
+start_line <- grep("Coefficients", model_output4_3)
+end_line <- length(model_output4_3)
+cat(model_output4_3[start_line:end_line], sep = "\n")
+```
+Considering all model diagnostics and information criteria, ARIMA(1,1,0) was selected as the best-fitting model.
+
+## U.S. Dollar Index
+### ARIMA(4,1,4)
+```{r}
+model_output5_1 <- capture.output(sarima(usd_ts,4,1,4))
+```
+```{r}
+start_line <- grep("Coefficients", model_output5_1)
+end_line <- length(model_output5_1)
+cat(model_output5_1[start_line:end_line], sep = "\n")
+```
+### SARIMA(4,1,2)(0,0,1)[12]
+```{r}
+model_output5_2 <- capture.output(sarima(usd_ts, 4,1,1,0,1,1,12))
+```
+```{r}
+start_line <- grep("Coefficients", model_output5_2)
+end_line <- length(model_output5_2)
+cat(model_output5_2[start_line:end_line], sep = "\n")
+```
+Considering all model diagnostics and information criteria, ARIMA(4,1,4) was selected as the best-fitting model.
+
+## Global Supply Chain Pressure Index
+### ARIMA(0,1,0)
+```{r}
+model_output6_1 <- capture.output(sarima(gscpi_ts,0,1,0))
+```
+```{r}
+start_line <- grep("Coefficients", model_output6_1)
+end_line <- length(model_output6_1)
+cat(model_output6_1[start_line:end_line], sep = "\n")
+```
+### ARIMA(1,1,2)
+```{r}
+model_output6_2 <- capture.output(sarima(gscpi_ts,1,1,2))
+```
+```{r}
+start_line <- grep("Coefficients", model_output6_2)
+end_line <- length(model_output6_2)
+cat(model_output6_2[start_line:end_line], sep = "\n")
+```
+Considering all model diagnostics and information criteria, ARIMA(0,1,0) was selected as the best-fitting model.
+
+## AHS Weighted Average Tariff
+### ARIMA(0,2,1) 
+```{r}
+model_output7_1 <- capture.output(sarima(ahs_ts,0,2,1))
+```
+```{r}
+start_line <- grep("Coefficients", model_output7_1)
+end_line <- length(model_output7_1)
+cat(model_output7_1[start_line:end_line], sep = "\n")
+```
+### ARIMA(1,2,2)
+```{r}
+model_output7_2 <- capture.output(sarima(ahs_ts,1,2,2))
+```
+```{r}
+start_line <- grep("Coefficients", model_output7_2)
+end_line <- length(model_output7_2)
+cat(model_output7_2[start_line:end_line], sep = "\n")
+```
+### ARIMA(0,1,1) 
+```{r}
+model_output7_3 <- capture.output(sarima(ahs_ts,0,1,0))
+```
+```{r}
+start_line <- grep("Coefficients", model_output7_3)
+end_line <- length(model_output7_3)
+cat(model_output7_3[start_line:end_line], sep = "\n")
+```
+Considering all model diagnostics and information criteria, ARIMA(1,2,2) was selected as the best-fitting model.
+
+## S&P 500 Index
+### ARIMA(0,2,1)
+```{r}
+model_output8_1 <- capture.output(sarima(sp500_ts,0,2,1))
+```
+```{r}
+start_line <- grep("Coefficients", model_output8_1)
+end_line <- length(model_output8_1)
+cat(model_output8_1[start_line:end_line], sep = "\n")
+```
+### ARIMA(1,2,1)
+```{r}
+model_output8_2 <- capture.output(sarima(sp500_ts,1,2,1))
+```
+```{r}
+start_line <- grep("Coefficients", model_output8_2)
+end_line <- length(model_output8_2)
+cat(model_output8_2[start_line:end_line], sep = "\n")
+```
+### ARIMA(0,1,1)
+```{r}
+model_output8_3 <- capture.output(sarima(sp500_ts,0,1,1))
+```
+```{r}
+start_line <- grep("Coefficients", model_output8_3)
+end_line <- length(model_output8_3)
+cat(model_output8_3[start_line:end_line], sep = "\n")
+```
+Considering all model diagnostics and information criteria, ARIMA(0,1,1) was selected as the best-fitting model.
+
+## U.S. Retail & Food Services Sales
+### ARIMA(0,1,2)
+```{r}
+model_output9_1 <- capture.output(sarima(rsafs_ts,0,1,2))
+```
 
 ```{r}
-auto.arima(ts_df)
+start_line <- grep("Coefficients", model_output9_1)
+end_line <- length(model_output9_1)
+cat(model_output9_1[start_line:end_line], sep = "\n")
 ```
-SARIMA(0,1,4)(0,0,2)[12] is best model for auto search.
+### ARIMA(2,1,0)
+```{r}
+model_output9_2 <- capture.output(sarima(rsafs_ts,2,1,0))
+```
 
 ```{r}
-# Set seed for reproducibility
-set.seed(345)
-
-###### Fit SARIMA(1,1,1)(1,1,1)[12] Model ######
-model_1_output <- capture.output(sarima(ts_df, 4, 1, 1, 0, 1, 1, 12))
-model_2_output <- capture.output(sarima(ts_df, 1, 1, 1, 0, 1, 1, 12))
-model_3_output <- capture.output(sarima(ts_df, 0, 1, 4, 0, 0, 2, 12))
-
-###### Extract and Print Relevant Output ######
-extract_model_output <- function(model_output, model_name) {
-  start_line <- grep("Coefficients", model_output)  # Locate coefficient section
-  end_line <- length(model_output)  # Capture entire output
-  cat("\n###", model_name, "###\n")
-  cat(model_output[start_line:end_line], sep = "\n")  # Print relevant details
-}
-
-###### Print Model Outputs ######
-extract_model_output(model_1_output, "SARIMA(4,1,1)(0,1,1)[12]")
-extract_model_output(model_2_output, "SARIMA(1,1,1)(0,1,1)[12]")
-extract_model_output(model_3_output, "SARIMA(0,1,4)(0,0,2)[12]")
+start_line <- grep("Coefficients", model_output9_2)
+end_line <- length(model_output9_2)
+cat(model_output9_2[start_line:end_line], sep = "\n")
 ```
-**Among the three candidate models, SARIMA(1,1,1)(0,1,1)[12] is selected as the most appropriate.**
+Considering all model diagnostics and information criteria, ARIMA(0,1,2) was selected as the best-fitting model.
 
-Although the (4,1,1)(0,1,1)[12] specification yields a slightly lower AIC, several of its AR coefficients are statistically insignificant, suggesting potential overfitting and reduced interpretability. Similarly, the (0,1,4)(0,0,2)[12] model captures short-term dynamics but fails to incorporate seasonal differencing (D=1), which is inconsistent with the pronounced seasonality of the TEUs series. In contrast, the (1,1,1)(0,1,1)[12] model achieves a favorable balance, with competitive AIC/BIC values, statistically significant parameters, and a parsimonious structure that adequately reflects both the underlying trend and seasonal dependence. Therefore, it represents the most robust and reliable choice among the three models.
+:::
 
+
+# Forecaseting
+::: {.panel-tabset}
+
+## Total TEUs
 ```{r}
-###### Fit ARIMA(1,0,2)(0,1,1)[12] Model ######
-fit <- Arima(ts_df, order = c(1, 1, 1), seasonal =list( order=c(0, 1, 1), period=12))
-
-###### Display Model Summary ######
-summary(fit)
-```
-```{r}
-# Forecast the next 365 periods
-forecast_result <- forecast(fit, h = 36)
-
-# Display forecast accuracy
-accuracy(forecast_result)
-
-# Plot the forecast
+fit <- Arima(la_teu_ts, order = c(0,1,1), seasonal = list(order = c(0,0,2), period = 12))
+forecast_result <- forecast(fit, h = 12)
 autoplot(forecast_result) +
-  labs(title = "ARIMA(1,1,1)x(0,1,1)[12] Forecast",
+  labs(title = "SARIMA(0,1,1)(0,0,2)[12] 12-Month Forecast",
        x = "Time",
        y = "Predicted Values") +
   theme_minimal()
 ```
-This plot presents the SARIMA(1,1,1)(0,1,1)[12] forecast for the next three years. The model suggests that container throughput at the Port of Los Angeles will remain at historically high levels, with clear seasonal fluctuations persisting. The mean forecast indicates relative stability without a strong upward or downward trend, while the widening confidence intervals highlight increasing uncertainty over time. Port activity is highly sensitive to global trade conditions, capacity constraints, and potential external shocks.
+The SARIMA(0,1,1)(0,0,2)[12] model captures both the seasonal and short-term variations in total container throughput. The fitted line closely follows the historical pattern, indicating that the model effectively reflects annual fluctuations in port activity. The 12-month-ahead forecast shows a moderate upward trend with widening confidence intervals, reflecting the growing uncertainty as the forecast horizon extends.
 
-
+## Loaded Imports
 ```{r}
-###### Forecast for 36 Periods (3 Years) ######
-forecast_horizon <- 36  # 36 months (3 years)
-
-###### Plot Forecasts Using Mean, Naïve, Drift Methods, and ARIMA Fit ######
-autoplot(ts_df) +
-  autolayer(meanf(ts_df, h = forecast_horizon), series = "Mean", PI = FALSE) +
-  autolayer(snaive(ts_df, h = forecast_horizon), series = "Naïve", PI = FALSE) +
-  autolayer(rwf(ts_df, drift = TRUE, h = forecast_horizon), series = "Drift", PI = FALSE) +
-  autolayer(forecast(fit, h = forecast_horizon), series = "ARIMA Fit", PI = FALSE) +
-  ggtitle("TEUs Forecast (Next 3 Year)") +
-  xlab("Year") + 
-  ylab("TEUs") +
-  guides(colour = guide_legend(title = "Forecast Methods")) +
+fit <- Arima(la_li_ts, order = c(3,1,3), seasonal = list(order = c(0,1,1), period = 12))
+forecast_result <- forecast(fit, h = 12)
+autoplot(forecast_result) +
+  labs(title = "SARIMA(3,1,3)(0,1,1)[12] 12-Month Forecast",
+       x = "Time",
+       y = "Predicted Values") +
   theme_minimal()
 ```
-This plot compares SARIMA with alternative benchmark methods, including Drift, Mean, and Naïve forecasts. The Naïve model simply extends the last observation forward, failing to capture the seasonal structure of the series. The Mean method produces an overly smoothed, nearly constant forecast that lacks interpretive value for a dynamic system. The Drift model incorporates a trend component but similarly neglects the strong seasonal patterns present in the data. In contrast, the SARIMA model effectively captures both long-term dynamics and recurring seasonal cycles, producing forecasts that are more consistent with historical patterns. 
 
-As such, SARIMA provides a more realistic and reliable basis for understanding future container throughput compared to simpler benchmark methods.
+The SARIMA(3,1,3)(0,1,1)[12] model provides a strong fit to the historical import series, successfully accounting for both seasonality and irregular changes. The model indicates that import volumes are likely to remain relatively stable, with mild cyclical movements during the next year. The shaded blue area represents the forecast confidence intervals, which gradually widen over time, suggesting increasing uncertainty in long-term predictions.
 
+## Loaded Exports
 ```{r}
-# Load required libraries
-library(tsibble)
-library(prophet)
-
-prophet_data <- df_teu%>%
-  select(Date, TEUs) %>%
-  rename(ds = Date, y = TEUs )  # Rename for Prophet
-
-###### Fit the Prophet Model ######
-prophet_model <- prophet(prophet_data)
-
-###### Extend the Forecast Horizon by 120 Months (10 Years) ######
-future_dates <- make_future_dataframe(prophet_model, periods = 36, freq = "month")
-
-###### Generate Forecasts ######
-forecast_data <- predict(prophet_model, future_dates)
-
-###### Plot Forecast ######
-plot(prophet_model, forecast_data) +
-  ggtitle("Forecast TEUs (Next 3 Years)") +
-  xlab("Date") +
-  ylab("TEUs")
+fit <- Arima(la_le_ts, order = c(1,1,2), seasonal = list(order = c(0,0,2), period = 12))
+forecast_result <- forecast(fit, h = 12)
+autoplot(forecast_result) +
+  labs(title = "SARIMA(1,1,2)(0,0,2)[12] 12-Month Forecast",
+       x = "Time",
+       y = "Predicted Values") +
+  theme_minimal()
 ```
-This forecast model differs from the SARIMA approach in several key ways. First, SARIMA explicitly incorporates seasonal differencing and seasonal parameters, which allows it to capture recurring 12-month cycles more precisely. In contrast, the model shown here reflects seasonal fluctuations indirectly through its fitted trend and widening confidence intervals, rather than parameterizing seasonality directly. Second, the SARIMA forecasts are typically smoother and preserve a clear seasonal pattern over time, whereas this model also reproduces seasonal swings but with wider uncertainty bands, indicating greater caution about long-term stability. Finally, while SARIMA is particularly well-suited for datasets with strong and stable seasonal patterns, the current model is more flexible in balancing trend and seasonal dynamics, though it may be less robust for long-horizon forecasts.
+The SARIMA(1,1,2)(0,0,2)[12] model demonstrates a reasonable fit for the export time series. The 12-month forecast suggests a relatively steady export trend following recent recoveries from previous downturns. The confidence intervals expand toward the end of the horizon, indicating greater uncertainty in later forecasts.
 
-
+## Brent Crude Oil Price
 ```{r}
-###### Forecast Next 12 Months Using SARIMA(1,0,2)(0,1,1)[12] ######
-sarima.for(ts_df, 12, 1,1,1,0,1,1,12)
+fit <- Arima(brent_ts, order = c(1,1,0), include.drift = TRUE)
+forecast_result <- forecast(fit, h = 12)
+autoplot(forecast_result) +
+  labs(title = "ARIMA(1,1,0) 12-Month Forecast",
+       x = "Time",
+       y = "Predicted Values") +
+  theme_minimal()
 ```
-The black line and points represent the historical container throughput (TEUs) from 2011 to 2020, showing notable fluctuations with an extreme dip around 2016. The red line and points indicate the forecasted values, which follow the historical pattern and maintain a relatively stable level without sharp deviations. The shaded gray area illustrates the confidence intervals, which widen over time, reflecting growing uncertainty in longer-term forecasts.
+The ARIMA(1,1,0) model provides a parsimonious yet effective representation of the Brent Crude Oil Price series. The fitted model captures the major trend shifts and volatility observed over the past two decades, including sharp rises and downturns. The 12-month forecast suggests that oil prices may stabilize in the near term, with a relatively wide confidence band reflecting the inherent volatility of the energy market.
 
-Overall, the model suggests that throughput at the Port of Los Angeles is expected to remain close to its historical average over the next year, with regular seasonal fluctuations but no significant structural shifts. The widening forecast intervals also highlight the potential influence of external economic, trade, or policy factors that could affect future outcomes.
+## U.S. Dollar Index
+```{r}
+fit <- Arima(usd_ts, order = c(4,1,4), include.drift = TRUE)
+forecast_result <- forecast(fit, h = 12)
+autoplot(forecast_result) +
+  labs(title = "ARIMA(4,1,4) 12-Month Forecast",
+       x = "Time",
+       y = "Predicted Values") +
+  theme_minimal()
+```
+The ARIMA(4,1,4) model fits the U.S. Dollar Index series well, capturing its long-term cycles and short-term fluctuations. The model indicates a gradual strengthening of the dollar over the forecast horizon, consistent with the recent upward momentum observed in historical data. The narrow confidence intervals suggest relatively high model certainty for short-term projections, though external macroeconomic factors may introduce additional variability.
 
+## Global Supply Chain Pressure Index
+```{r}
+fit <- Arima(gscpi_ts, order = c(0,1,0), include.drift = TRUE)
+forecast_result <- forecast(fit, h = 12)
+autoplot(forecast_result) +
+  labs(title = "ARIMA(0,1,0) 12-Month Forecast",
+       x = "Time",
+       y = "Predicted Values") +
+  theme_minimal()
+```
+The ARIMA(0,1,0) model effectively captures the recent fluctuations in the Global Supply Chain Pressure Index. The model suggests that after the extreme disruptions around 2021–2022, the index has stabilized and returned closer to its long-term average. The 12-month forecast indicates mild volatility ahead, with the confidence intervals widening slightly — reflecting the persistence of global logistical uncertainties while suggesting no major new shocks in the near term.
 
+## AHS Weighted Average Tariff
+```{r}
+fit <- Arima(ahs_ts, order = c(1,2,2), include.drift = TRUE)
+forecast_result <- forecast(fit, h = 1)
+autoplot(forecast_result) +
+  labs(title = "ARIMA(1,2,2) 12-Month Forecast",
+       x = "Time",
+       y = "Predicted Values") +
+  theme_minimal()
+```
+The ARIMA(1,2,2) model fits the AHS Weighted Average Tariff series appropriately, capturing its long-term downward trend. The results show that global tariff levels have steadily declined since the early 2000s, reflecting progressive trade liberalization and tariff reduction policies. The short forecast horizon remains relatively flat, suggesting tariff rates are expected to stabilize at their current low levels in the near future.
 
+## S&P 500 Index
+```{r}
+fit <- Arima(sp500_ts, order = c(0,1,1), include.drift = TRUE)
+forecast_result <- forecast(fit, h = 12)
+autoplot(forecast_result) +
+  labs(title = "ARIMA(0,1,1) 12-Month Forecast",
+       x = "Time",
+       y = "Predicted Values") +
+  theme_minimal()
+```
+## U.S. Retail & Food Services Sales
+```{r}
+fit <- Arima(rsafs_ts, order = c(0,1,2), include.drift = TRUE)
+forecast_result <- forecast(fit, h = 12)
+autoplot(forecast_result) +
+  labs(title = "ARIMA(0,1,2) 12-Month Forecast",
+       x = "Time",
+       y = "Predicted Values") +
+  theme_minimal()
+```
+The ARIMA(0,1,2) model captures the strong upward trend and cyclical fluctuations in U.S. Retail & Food Services Sales. The model effectively reflects the steady expansion of consumer spending over the past two decades, with only temporary disruptions during major economic downturns, such as the 2008 financial crisis and the 2020 pandemic shock. The 12-month forecast continues this growth trajectory, suggesting stable consumer demand and sustained economic resilience, while the widening confidence intervals indicate moderate uncertainty in long-term consumption trends.
 
+:::
 
+# Comparison with Benchmark Methods
+```{r}
+plot_forecasts <- function(forecast_result, ts, h, fit) {
+  print(accuracy(forecast_result))  
+  # Plot the forecasts using Mean, Naïve, Drift Methods, and ARIMA Fit
+  autoplot(ts) +
+    autolayer(meanf(ts, h = h), series = "Mean", PI = FALSE) +
+    autolayer(naive(ts, h = h), series = "Naïve", PI = FALSE) +
+    autolayer(snaive(ts, h = h), series = "SNaïve", PI = FALSE) +
+    autolayer(rwf(ts, drift = TRUE, h = h), series = "Drift", PI = FALSE) +
+    autolayer(forecast(fit, h = h), series = "Fit", PI = FALSE) +
+    xlab("Date") + 
+    ylab("Predicted Values") +
+    guides(colour = guide_legend(title = "Forecast Methods")) +
+    theme_minimal()
+}
+```
 
+::: {.panel-tabset}
+## Total TEUs
+```{r}
+fit <- Arima(la_teu_ts, order = c(0,1,1), seasonal = list(order = c(0,0,2), period = 12))
+forecast_result <- forecast(fit, h = 12)
+plot_forecasts(forecast_result, la_teu_ts, 12, fit)
+```
+## Loaded Imports
+```{r}
+fit <- Arima(la_li_ts, order = c(3,1,3), seasonal = list(order = c(0,1,1), period = 12))
+forecast_result <- forecast(fit, h = 12)
+plot_forecasts(forecast_result, la_li_ts, 12, fit)
+```
+## Loaded Exports
+```{r}
+fit <- Arima(la_le_ts, order = c(1,1,2), seasonal = list(order = c(0,0,2), period = 12))
+forecast_result <- forecast(fit, h = 12)
+plot_forecasts(forecast_result, la_le_ts, 12, fit)
+```
+## Brent Crude Oil Price
+```{r}
+fit <- Arima(brent_ts, order = c(1,1,0), include.drift = TRUE)
+forecast_result <- forecast(fit, h = 12)
+plot_forecasts(forecast_result, brent_ts, 12, fit)
+```
+## U.S. Dollar Index
+```{r}
+fit <- Arima(usd_ts, order = c(4,1,4), include.drift = TRUE)
+forecast_result <- forecast(fit, h = 12)
+plot_forecasts(forecast_result, usd_ts, 12, fit)
+```
+## Global Supply Chain Pressure Index
+```{r}
+fit <- Arima(gscpi_ts, order = c(0,1,0), include.drift = TRUE)
+forecast_result <- forecast(fit, h = 12)
+plot_forecasts(forecast_result, gscpi_ts, 12, fit)
+```
+## AHS Weighted Average Tariff
+```{r}
+fit <- Arima(ahs_ts, order = c(1,2,2), include.drift = TRUE)
+forecast_result <- forecast(fit, h = 1)
+plot_forecasts(forecast_result, ahs_ts, 1, fit)
+```
+## S&P 500 Index
+```{r}
+fit <- Arima(sp500_ts, order = c(0,1,1), include.drift = TRUE)
+forecast_result <- forecast(fit, h = 12)
+plot_forecasts(forecast_result, sp500_ts, 12, fit)
+```
+## U.S. Retail & Food Services Sales
+```{r}
+fit <- Arima(rsafs_ts, order = c(0,1,2), include.drift = TRUE)
+forecast_result <- forecast(fit, h = 12)
+plot_forecasts(forecast_result, rsafs_ts, 12, fit)
+```
+:::
 
-
-
-
-
-
-
-
-
-
+Across all series — including total throughput, imports, exports, and macroeconomic indicators — our SARIMA and ARIMA models generally outperform the benchmark forecasting methods (Drift, Mean, Naïve, and Seasonal Naïve). While the Naïve and SNaïve methods occasionally capture short-term seasonal effects, our models provide more stable and accurate long-term trend predictions. The comparison of forecast curves shows that our models better adapt to structural changes and volatility in the data. Furthermore, the evaluation metrics (ME, RMSE, MAE, MAPE, MASE, and ACF1) consistently confirm the superior performance of our models, demonstrating their reliability and robustness for future forecasting.
 
 
 

@@ -1014,8 +1014,7 @@ adf.test(diff(gscpi_ts))
 ```
 ## AHS Weighted Average Tariff
 ```{r}
-
-adf.test(diff(rsafs_ts, differences = 2))
+adf.test(diff(ahs_ts, differences = 2))
 ```
 ## S&P 500 Index
 ```{r}
