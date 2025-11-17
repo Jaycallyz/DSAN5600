@@ -1,8 +1,560 @@
 ---
 title: "Other: Interrupted TS/ARFIMA/Spectral Analysis"
-date: "2025-08-30"
+date: "2025-11-17"
 format:
   html:
     embed-resources: true
     toc: true
+    code-fold: true 
+execute:
+  warning: false
+  message: false
 ---
+
+In previous sections, I've already examined long-term patterns in port activity and studied how external factors shape monthly container throughput at the Port of Los Angeles. However, these models assume a stable underlying environment and do not explicitly account for sudden disruptions that can alter the structure of the time series.
+
+To address this limitation, I'll apply an Interrupted Time Series analysis to evaluate the impact of a major exogenous shock- **the outbreak of COVID-19** —on port throughput. 
+
+As shown in the figure below, container throughput at the Port of Los Angeles exhibited a dramatic drop in early 2020, followed by a rapid rebound as U.S. import demand surged later in the year. This abrupt change in both the level and subsequent growth pattern suggests a meaningful structural shift. 
+
+The ITS framework allows us to formally estimate:
+
+- whether the outbreak produced an immediate level change in monthly TEUs
+- whether the post-COVID trend differs from the pre-COVID trajectory
+
+I use March 2020 as the intervention point, corresponding to the onset of widespread lockdowns and the first major wave of global supply-chain disruptions.
+
+# Graph to identify the intervention
+```{r}
+library(tidyverse)
+library(ggplot2)
+library(forecast)
+library(astsa) 
+library(xts)
+library(tseries)
+library(fpp2)
+library(fma)
+library(lubridate)
+library(tidyverse)
+library(TSstudio)
+library(quantmod)
+library(tidyquant)
+library(plotly)
+library(ggplot2)
+library(knitr)
+library(kableExtra)
+library(fGarch)
+
+# --- Load and clean your data ---
+la_teu_data <- read_csv("data-raw/la_teu_data.csv", show_col_types = FALSE) %>%
+  mutate(
+    ym   = zoo::as.yearmon(Date, "%b-%y"),
+    Date = as.Date(ym),
+    Total_TEUs = readr::parse_number(Total_TEUs)
+  ) %>%
+  filter(!is.na(Date), !is.na(Total_TEUs)) %>%
+  arrange(Date)
+
+# 12-month moving average
+la_teu_data <- la_teu_data %>%
+  mutate(MA12 = zoo::rollmean(Total_TEUs, k = 12, align = "right", fill = NA))
+
+# Filter since 2000
+la_teu_data <- la_teu_data %>% filter(Date >= as.Date("2000-01-01"))
+
+# --- Define intervention date (COVID shock) ---
+intervention_date <- as.Date("2020-03-01")
+
+# Range for annotation
+max_y <- max(la_teu_data$Total_TEUs, na.rm = TRUE)
+min_y <- min(la_teu_data$Total_TEUs, na.rm = TRUE)
+
+# --- Plotly figure ---
+fig <- plot_ly() %>%
+  add_lines(
+    data = la_teu_data,
+    x = ~Date, y = ~Total_TEUs,
+    name = "Monthly TEUs",
+    line = list(color = "#2ca25f")
+  ) %>%
+  add_lines(
+    data = la_teu_data,
+    x = ~Date, y = ~MA12,
+    name = "12-month MA",
+    line = list(color = "#e6550d", width = 3)
+  ) %>%
+  layout(
+    title = "Port of Los Angeles — Monthly TEUs with COVID-19 Intervention",
+    xaxis = list(title = "Date"),
+    yaxis = list(title = "TEUs"),
+
+    # vertical intervention line
+    shapes = list(
+      list(
+        type = "line",
+        x0 = intervention_date,
+        x1 = intervention_date,
+        y0 = min_y,
+        y1 = max_y,
+        line = list(color = "red", dash = "dash"),
+        xref = "x",
+        yref = "y"
+      )
+    ),
+
+    # annotation
+    annotations = list(
+      list(
+        x = intervention_date,
+        y = max_y * 0.95,
+        text = "COVID-19",
+        showarrow = TRUE,
+        arrowhead = 2,
+        ax = 0, ay = -40,
+        font = list(size = 12, color = "red")
+      )
+    )
+  )
+
+fig
+```
+
+The figure shows the monthly container throughput at the Port of Los Angeles, highlighting a sharp collapse in March 2020 followed by a rapid rebound as supply-chain conditions shifted during the COVID-19 pandemic. The vertical intervention line marks the onset of COVID-19, which corresponds to a clear structural break in both the level and trend of TEUs.
+
+# Graph with trend lines
+```{r}
+# --- Create Data Set for the ITS Analysis (Port of LA TEUs) ---
+
+# Construct data frame with ITS components:
+dataTS_la <- data.frame(
+  Y  = la_teu_data$Total_TEUs,                # outcome variable
+  Xt = seq_along(la_teu_data$Total_TEUs),     # time trend
+  Zt = ifelse(la_teu_data$Date < intervention_date, 0, 1),  # Intervention dummy
+  Pt = 0                                       # post-intervention time
+)
+
+# Assign values to Pt (only counts time after intervention)
+dataTS_la$Pt[la_teu_data$Date >= intervention_date] <- 
+  seq_len(sum(la_teu_data$Date >= intervention_date))
+
+# Build a preview table similar to the original example
+d.temp.la <- dataTS_la
+d.temp.la$Y <- round(as.numeric(d.temp.la$Y), 2)
+rownames(d.temp.la) <- NULL
+
+# find intervention row
+inter_row <- which(la_teu_data$Date == intervention_date)
+
+d.temp.la <- dataTS_la
+d.temp.la$Y <- round(as.numeric(d.temp.la$Y), 2)
+
+preview_la <- rbind(
+  head(d.temp.la, 5),
+  c("...", "...", "...", "..."),
+  d.temp.la[inter_row - 1, ],
+  c("**START**", "**COVID**", "---", "---"),
+  d.temp.la[inter_row:(inter_row + 7), ],
+  c("...", "...", "...", "..."),
+  tail(d.temp.la, 5)
+)
+
+kable(
+  preview_la,
+  row.names = FALSE,
+  caption = "Preview of Time Series Data Using Xt, Zt, and Pt for Port of LA TEUs"
+) %>%
+  kable_styling(full_width = FALSE,
+                bootstrap_options = c("striped", "hover", "condensed"))
+
+```
+
+```{r}
+dataTS_la$Pt[la_teu_data$Date >= intervention_date] <-
+  seq_len(sum(la_teu_data$Date >= intervention_date))
+
+
+model_la <- lm(Y ~ Xt + Zt + Pt, data = dataTS_la)
+dataTS_la$Y_hat <- predict(model_la)
+
+t_covid <- which(la_teu_data$Date == intervention_date)
+
+plot_ly(dataTS_la, x = ~Xt) %>%
+  
+  add_markers(
+    y = ~Y,
+    name = "Observed TEUs",
+    marker = list(color = "gray", opacity = 0.6),
+    hoverinfo = "text",
+    text = ~paste(
+      "Time (month index):", Xt,
+      "<br>TEUs:", round(Y, 0)
+    )
+  ) %>%
+  
+  add_lines(
+    y = ~Y_hat,
+    name = "Fitted ITS Line",
+    line = list(color = "steelblue", width = 2)
+  ) %>%
+  
+  # covie-19
+  add_segments(
+    x = t_covid, xend = t_covid,
+    y = min(dataTS_la$Y, na.rm = TRUE),
+    yend = max(dataTS_la$Y, na.rm = TRUE),
+    line = list(dash = "dot", color = "firebrick", width = 2),
+    name = "COVID-19 Shock"
+  ) %>%
+  
+  layout(
+    title = "Interrupted Time Series: Port of Los Angeles Monthly TEUs",
+    xaxis = list(title = "Time (months)"),
+    yaxis = list(title = "TEUs"),
+    showlegend = TRUE,
+    annotations = list(
+      list(
+        x = t_covid - 20,                       
+        y = max(dataTS_la$Y, na.rm = TRUE),
+        text = "COVID-19 Shock",
+        showarrow = FALSE,
+        font = list(color = "firebrick", size = 12)
+      )
+    )
+  )
+
+
+
+```
+Notes:
+
+The vertical line marks
+Xt = 243, which corresponds to the COVID-19 shock in March 2020.
+
+The fitted regression includes:
+
+- *Xt:* the baseline monthly time trend before the intervention
+
+- *Zt:* the immediate level change in TEUs following the COVID-19 shock
+
+- *Pt:* the change in slope (trend) after the intervention
+
+
+# Variable Descriptions
+| COLUMN | VARIABLE NAME | DESCRIPTION |
+|-------|----------------|-------------|
+| $Y_t$ | Port of LA TEUs | Monthly container throughput (TEUs) at the Port of Los Angeles |
+| $X_t$ | Time | Month index (sequential months from the start of the dataset) |
+| $Z_t$ | COVID-19 Indicator | Equals 1 if the observation is on or after **March 2020**, 0 otherwise |
+| $P_t$ | Time Since COVID-19 | Number of months since March 2020 (0 before intervention, increases afterward) |
+
+
+The ITS model for the Port of Los Angeles becomes:
+
+$$Y_t = \beta_0 + \beta_1 X_t + \beta_2 Z_t + \beta_3 P_t + \varepsilon_t$$
+
+
+**Where:**
+
+- $Y_t$: Monthly container throughput (TEUs) at time $t$  
+- $X_t$: Time index (1, 2, 3, …)  
+- $Z_t$: COVID-19 dummy variable  
+  - 0 = before March 2020  
+  - 1 = on or after March 2020  
+- $P_t$: Number of months since March 2020  
+  - 0 before COVID-19  
+  - 1, 2, 3… after intervention  
+- $\varepsilon_t$: Random error term  
+
+# Predicted outcomes and their Counterfactuals
+Fitting the model:
+```{r}
+library(broom)
+library(dplyr)
+library(kableExtra)
+
+# Fit the interrupted time series model for Port of LA
+regTS_la <- lm(Y ~ Xt + Zt + Pt, data = dataTS_la)
+summary_table_la <- tidy(regTS_la)
+
+# 3. Add significance stars and nice labels
+summary_table_la <- summary_table_la %>%
+  mutate(
+    stars = case_when(
+      p.value < 0.001 ~ "***",
+      p.value < 0.01  ~ "**",
+      p.value < 0.05  ~ "*",
+      p.value < 0.1   ~ ".",
+      TRUE            ~ ""
+    ),
+    term = recode(
+      term,
+      "Xt"          = "Time",
+      "Zt"          = "COVID-19 Indicator",
+      "Pt"          = "Time Since COVID-19",
+      "(Intercept)" = "Constant"
+    ),
+    `Estimate (SE)` = paste0(
+      round(estimate, 2), stars,
+      "\n(",
+      round(std.error, 2),
+      ")"
+    )
+  )
+
+# 4. Select and print the desired columns
+summary_table_la %>%
+  select(term, `Estimate (SE)`) %>%
+  kable(
+    col.names = c(" ", "Estimate (SE)"),
+    align     = "l",
+    escape    = FALSE,
+    caption   = "Interrupted Time Series Regression for Port of LA Monthly TEUs"
+  ) %>%
+  kable_styling(full_width = FALSE)
+```
+
+| Term                    | Estimate        | Interpretation                                                                                                                                |
+| ----------------------- | --------------- | --------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Constant**            | 493,522.39***   | The baseline monthly TEUs at time ($X_t$ = 0).                                                                                                  |
+| **Time**                | 1248.55***      | Pre-COVID trend: On average, TEUs increased by **1,249 containers per month** before COVID-19.                                                |
+| **COVID-19 Indicator**  | –24,271.06 (ns) | Immediate effect: TEUs dropped by about **24k containers** during the early COVID shock, but the effect is **not statistically significant**. |
+| **Time Since COVID-19** | –226.35 (ns)    | Change in slope: After COVID, the monthly trend **decreased by 226 TEUs per month**, also **not statistically significant**.                  |
+
+Let’s interpret our coefficients:
+
+- The Time coefficient reflects the trend in monthly container throughput at the Port of Los Angeles before the intervention (COVID-19). **It is positive and highly significant, indicating that throughput was steadily increasing over time.** Specifically, before March 2020, the port handled about 1,249 additional TEUs per month on average.
+
+- The COVID-19 Indicator coefficient represents the immediate level change in throughput at the time of the COVID-19 shock. The estimated effect is –24,271.06 TEUs, **but it is not statistically significant, suggesting that the initial COVID-19 shock did not cause a sharp or sustained drop in throughput exactly at the moment the pandemic began.** This aligns with real-world patterns: although the port experienced temporary disruptions, volumes quickly rebounded.
+
+- The Constant (493,522.39***) represents the estimated level of monthly throughput at the starting point of the dataset (when $X_t$ =0).
+It reflects the base TEU volume at the beginning of the study period.
+
+
+# Plotting all predicted outcomes and their counterfactuals
+```{r}
+library(plotly)
+t_covid <- which(la_teu_data$Date == intervention_date)
+
+# Step 1: Get predictions from the ITS model
+dataTS_la$Y_hat <- predict(regTS_la, newdata = dataTS_la)
+
+# Step 2: Create counterfactual where Zt = 0 and Pt = 0 (i.e., no COVID)
+datanew_la <- data.frame(
+  Xt = dataTS_la$Xt,
+  Zt = 0,
+  Pt = 0
+)
+dataTS_la$Y_counterfactual <- predict(regTS_la, newdata = datanew_la)
+
+# Step 3: Create interactive plot
+fig_la <- plot_ly()
+
+# Actual observed TEUs
+fig_la <- fig_la %>%
+  add_markers(
+    x = ~dataTS_la$Xt,
+    y = ~dataTS_la$Y,
+    name = "Observed TEUs",
+    marker = list(color = "gray", opacity = 0.5)
+  )
+
+# Predicted line before and after COVID (ITS fitted values)
+fig_la <- fig_la %>%
+  add_lines(
+    x = ~dataTS_la$Xt[1:(t_covid - 1)],
+    y = ~dataTS_la$Y_hat[1:(t_covid - 1)],
+    name = "Predicted (Pre-COVID)",
+    line = list(color = "dodgerblue")
+  ) %>%
+  add_lines(
+    x = ~dataTS_la$Xt[t_covid:nrow(dataTS_la)],
+    y = ~dataTS_la$Y_hat[t_covid:nrow(dataTS_la)],
+    name = "Predicted (Post-COVID)",
+    line = list(color = "dodgerblue")
+  )
+
+# Counterfactual line after COVID (what TEUs would look like with no COVID)
+fig_la <- fig_la %>%
+  add_lines(
+    x = ~dataTS_la$Xt[t_covid:nrow(dataTS_la)],
+    y = ~dataTS_la$Y_counterfactual[t_covid:nrow(dataTS_la)],
+    name = "Counterfactual (No COVID)",
+    line = list(color = "darkorange", dash = "dash")
+  )
+
+# Vertical line for intervention
+fig_la <- fig_la %>%
+  add_lines(
+    x = c(t_covid, t_covid),
+    y = c(min(dataTS_la$Y, na.rm = TRUE), max(dataTS_la$Y, na.rm = TRUE)),
+    name = "COVID-19 Intervention",
+    line = list(color = "firebrick", dash = "dot"),
+    showlegend = TRUE
+  )
+
+# Layout settings
+fig_la <- fig_la %>%
+  layout(
+    title = "Port of Los Angeles TEUs: Predicted vs. Counterfactual (COVID-19)",
+    xaxis = list(title = "Time (months)"),
+    yaxis = list(title = "TEUs"),
+    legend = list(x = 0.01, y = 0.99)
+  )
+
+fig_la
+```
+
+Overall, the plot shows that the Port of LA experienced a temporary disruption in 2020, but the long-run trajectory was not significantly altered, and throughput quickly returned to its expected growth path.
+
+# Delayed Effects in Time Series
+The coefficients estimated in our interrupted time series model do not tell us whether the difference between each predicted TEU value and its counterfactual is statistically significant. Instead, they help us understand two key structural effects:
+
+- whether there was an immediate level change in port throughput after the COVID-19 intervention
+
+- whether the slope (trend) of monthly TEUs changed after the intervention occurred
+
+There is no formal statistical test that evaluates whether each individual predicted TEU value differs meaningfully from its corresponding counterfactual value. This is important to keep in mind when interpreting the trajectory of port activity over time.
+
+In the case of the Port of Los Angeles, the impact of COVID-19 may vary depending on which part of the time series we examine. It is possible that there was no sharp immediate effect when the pandemic began. Instead, short-term disruptions may have been followed by a rapid recovery as supply chains adjusted and demand patterns shifted. Alternatively, throughput might have dipped temporarily and then surged later due to restocking and the boom in e-commerce.
+
+Recognizing these delayed or dynamic effects requires examining the entire time series within its real-world context. We should not rely on regression coefficients alone to draw conclusions about COVID-19’s impact on port operations.
+
+# Delayed Effects of the COVID-19 Intervention
+
+The timing of the COVID-19 shock plays an important role in understanding its impact on the Port of Los Angeles. If we observe the monthly TEUs immediately after the intervention point in early 2020, we see a sharp drop in container throughput. This reflects the immediate disruption caused by the initial lockdowns, supply chain interruptions, and global uncertainty.
+
+However, if we look several months later, the pattern changes significantly. By mid-2020 and throughout 2021, TEUs not only recovered but surged to historically high levels. This suggests that the medium- to long-term effect of COVID-19 on the port was strongly positive, driven by factors such as rapid consumer demand rebound, e-commerce growth, and a global wave of restocking.
+
+This pattern illustrates a classic delayed effect in interrupted time series analysis. The immediate response shows a temporary decline, while the longer-term trend reveals substantial growth. Therefore, the visual evidence suggests that the COVID-19 intervention did not create a lasting negative shock but instead led to an extended period of elevated activity once global trade patterns adjusted.
+
+
+```{r}
+# Step 1: Predict from your actual model
+pred1_la <- predict(regTS_la, newdata = dataTS_la)
+
+# Step 2: Create counterfactual dataset (COVID-19 never occurs)
+datanew_la <- data.frame(
+  Xt = 1:nrow(dataTS_la),
+  Zt = 0,
+  Pt = 0
+)
+pred2_la <- predict(regTS_la, newdata = datanew_la)
+
+# Step 3: Add predictions to dataset
+dataTS_la$Y_hat <- pred1_la
+dataTS_la$Y_counterfactual <- pred2_la
+dataTS_la$Xt <- 1:nrow(dataTS_la)
+
+# IMPORTANT: intervention point for Port of LA
+T_covid <- 241         # March 2020
+T_delayed <- 280       # e.g., potential delayed effect (you can adjust)
+
+# Step 4: Create interactive plot
+fig_la <- plot_ly()
+
+# Observed TEUs
+fig_la <- fig_la %>%
+  add_markers(
+    x = ~Xt, y = ~Y, data = dataTS_la,
+    name = "Observed TEUs",
+    marker = list(color = "gray", opacity = 0.5)
+  )
+
+# Predicted trend before & after COVID
+fig_la <- fig_la %>%
+  add_lines(
+    x = ~Xt[1:T_covid], y = ~Y_hat[1:T_covid], data = dataTS_la,
+    name = "Predicted (Pre-COVID)",
+    line = list(color = "dodgerblue4")
+  ) %>%
+  add_lines(
+    x = ~Xt[(T_covid+1):nrow(dataTS_la)],
+    y = ~Y_hat[(T_covid+1):nrow(dataTS_la)],
+    data = dataTS_la,
+    name = "Predicted (Post-COVID)",
+    line = list(color = "dodgerblue4")
+  )
+
+# Counterfactual no-COVID trend
+fig_la <- fig_la %>%
+  add_lines(
+    x = ~Xt[(T_covid+1):nrow(dataTS_la)],
+    y = ~Y_counterfactual[(T_covid+1):nrow(dataTS_la)],
+    data = dataTS_la,
+    name = "Counterfactual (No COVID)",
+    line = list(color = "darkorange2", dash = "dash")
+  )
+
+# Vertical COVID intervention line
+fig_la <- fig_la %>%
+  add_lines(
+    x = c(T_covid, T_covid),
+    y = c(min(dataTS_la$Y), max(dataTS_la$Y)),
+    line = list(color = "red", dash = "dot"),
+    showlegend = FALSE
+  ) %>%
+  add_text(
+    x = T_covid, y = max(dataTS_la$Y) * 1.02,
+    text = "COVID-19 Intervention",
+    showlegend = FALSE,
+    textfont = list(color = "red")
+  )
+
+# OPTIONAL: delayed effect (adjust T_delayed if needed)
+fig_la <- fig_la %>%
+  add_lines(
+    x = c(T_delayed, T_delayed),
+    y = c(min(dataTS_la$Y), max(dataTS_la$Y)),
+    line = list(color = "forestgreen", dash = "dot"),
+    showlegend = FALSE
+  ) %>%
+  add_text(
+    x = T_delayed - 10,
+    y = max(dataTS_la$Y) * 0.95,
+    text = "Possible Delayed Effect",
+    showlegend = FALSE,
+    textfont = list(color = "forestgreen")
+  )
+
+# Layout formatting
+fig_la <- fig_la %>%
+  layout(
+    title = "Port of Los Angeles TEUs: Predicted vs. Counterfactual (COVID-19)",
+    xaxis = list(title = "Time (months)"),
+    yaxis = list(title = "TEUs"),
+    legend = list(x = 0.01, y = 0.99)
+  )
+
+fig_la
+
+```
+
+At T = 241 (the red line), which marks the start of the COVID-19 intervention for the Port of Los Angeles, the predicted TEU value shows a noticeable drop. This sharp decline represents the immediate disruption caused by the pandemic, when global supply chains suddenly stalled and vessel schedules were heavily affected.
+
+Over time, especially by T = 280 (the green line), the predicted TEUs begin to recover and move closer to the counterfactual trend. This suggests a delayed effect, where the port gradually rebounded from the initial shock and returned to a growth path, though still slightly below the no-COVID scenario.
+
+In the graph:
+
+- The gray points represent observed monthly TEUs at the Port of LA
+- The orange line shows predicted values from the ITS model before COVID
+- The green line shows predicted values after COVID
+- The red dashed line marks the timing of the COVID-19 intervention (T = 241)
+- The green dashed line marks a point used to evaluate possible delayed effects (T = 280)
+- The red dashed counterfactual line shows what TEUs would have looked like in a no-COVID world
+
+# Conclusion
+
+COVID-19 was associated with a clear short-term drop in container throughput at the Port of Los Angeles. The immediate decline was noticeable in both the observed data and the model’s predicted values, although this short-term effect was not statistically significant. In the months that followed, TEUs gradually recovered, but at a slower pace than what would have been expected under a no-COVID scenario. This suggests that the pandemic had a lasting negative impact on port operations, with a delayed recovery rather than a quick rebound.
+
+Overall, the results emphasize the importance of distinguishing between short-term disruptions and longer-term structural changes when evaluating the effects of external shocks in time series analysis.
+
+
+
+
+
+
+
+
+
+
+
