@@ -395,5 +395,35 @@
     "crumbs": [
       "Other: Interrupted TS/ARFIMA/Spectral Analysis"
     ]
+  },
+  {
+    "objectID": "financial-ts-models.html",
+    "href": "financial-ts-models.html",
+    "title": "Financial Time Series Models (ARCH/GARCH)",
+    "section": "",
+    "text": "In the earlier sections, we examined trade patterns, external drivers, and supply-chain shocks affecting activity at the Port of Los Angeles. To extend this analysis from a financial perspective, we use the returns of the Dow Jones Transportation (DJT) to study volatility in the transportation sector.\nBecause DJT is closely linked to port activity and logistics conditions, its returns exhibit clear volatility clustering—periods of high turbulence tend to follow one another, as do calmer periods. To capture this behavior, we apply ARCH/GARCH models to examine how transportation-sector volatility responds to major events such as financial crises and the COVID-19 pandemic, offering additional insight into supply-chain-related risk.",
+    "crumbs": [
+      "Financial Time Series Models (ARCH/GARCH)"
+    ]
+  },
+  {
+    "objectID": "financial-ts-models.html#garch-on-residuals",
+    "href": "financial-ts-models.html#garch-on-residuals",
+    "title": "Financial Time Series Models (ARCH/GARCH)",
+    "section": "GARCH on Residuals",
+    "text": "GARCH on Residuals\nFit a GARCH model to the residuals of the ARIMA model.\n\nModel SelectionManual SearchModel FittingForecasting\n\n\nTo determine the appropriate values for GARCH(p, q), we examine the ACF and PACF plots of the squared residuals from the ARIMA model. Significant spikes in the ACF and PACF at certain lags can provide insight into the orders of p (ARCH terms) and q (GARCH terms) for the GARCH model. Specifically, the number of significant lags in the ACF and PACF can guide the selection of the GARCH model’s parameters.\n\n\nCode\n# Get residuals from the fitted ARIMA model\narima.res &lt;- arima_110$residuals\n# Compute squared residuals\nsquared.arima.res &lt;- arima.res^2\nggtsdisplay(arima.res, main=\"ACF and PACF of ARIMA Residuals\")\n\n\n\n\n\n\n\n\n\n\n\nCode\nggtsdisplay(squared.arima.res, main=\"ACF and PACF of Squared ARIMA Residuals\")\n\n\n\n\n\n\n\n\n\nSignificant spikes at lags 1–4 in the ACF of squared residuals suggest the presence of potential ARCH effects, indicating time-varying volatility in the data. Additionally, the PACF of squared residuals reveals structure at lags 1-3, further supporting the need for fitting an ARCH model to capture these dependencies.\n\n\n\n\nCode\n# Initialize list to store models\nmodels &lt;- list()\ncc &lt;- 1\n\n# Loop over GARCH(p, q) combinations\nfor (p in 1:3) {\n  for (q in 1:4) {\n    models[[cc]] &lt;- garch(arima.res, order = c(q, p), trace = FALSE)\n    cc &lt;- cc + 1\n  }\n}\n\n# Extract AIC values for all models\nGARCH_AIC &lt;- sapply(models, AIC)\n\n# Find and return the best model (lowest AIC)\nbest_index &lt;- which.min(GARCH_AIC)\nmodels[[best_index]]\n\n\n\nCall:\ngarch(x = arima.res, order = c(q, p), trace = FALSE)\n\nCoefficient(s):\n       a0         a1         b1  \n4.936e-06  8.721e-02  8.923e-01  \n\n\nThis suggests that the best model is GARCH(1,1), as it yields the lowest AIC, indicating a better fit to the data compared to other models.\n\n\n\n\nCode\n# Fit a GARCH(1,1) model to ARIMA residuals and display summary\ngarch_model &lt;- garchFit(~ garch(1,1), data = arima.res, trace = FALSE)\nsummary(garch_model)\n\n\n\nTitle:\n GARCH Modelling \n\nCall:\n garchFit(formula = ~garch(1, 1), data = arima.res, trace = FALSE) \n\nMean and Variance Equation:\n data ~ garch(1, 1)\n&lt;environment: 0x1239325c0&gt;\n [data = arima.res]\n\nConditional Distribution:\n norm \n\nCoefficient(s):\n        mu       omega      alpha1       beta1  \n5.6391e-04  4.9532e-06  8.7346e-02  8.9203e-01  \n\nStd. Errors:\n based on Hessian \n\nError Analysis:\n        Estimate  Std. Error  t value Pr(&gt;|t|)    \nmu     5.639e-04   1.537e-04    3.670 0.000243 ***\nomega  4.953e-06   7.567e-07    6.546 5.91e-11 ***\nalpha1 8.735e-02   7.669e-03   11.390  &lt; 2e-16 ***\nbeta1  8.920e-01   9.330e-03   95.613  &lt; 2e-16 ***\n---\nSignif. codes:  0 '***' 0.001 '**' 0.01 '*' 0.05 '.' 0.1 ' ' 1\n\nLog Likelihood:\n 18521.22    normalized:  2.869728 \n\nDescription:\n Tue Nov 18 04:23:39 2025 by user:  \n\n\nStandardised Residuals Tests:\n                                  Statistic    p-Value\n Jarque-Bera Test   R    Chi^2  4194.606286 0.00000000\n Shapiro-Wilk Test  R    W               NA         NA\n Ljung-Box Test     R    Q(10)    17.361203 0.06674389\n Ljung-Box Test     R    Q(15)    24.623454 0.05523460\n Ljung-Box Test     R    Q(20)    28.496765 0.09815155\n Ljung-Box Test     R^2  Q(10)     6.158276 0.80179487\n Ljung-Box Test     R^2  Q(15)     7.339588 0.94753236\n Ljung-Box Test     R^2  Q(20)     8.968039 0.98327450\n LM Arch Test       R    TR^2      6.298362 0.90030102\n\nInformation Criterion Statistics:\n      AIC       BIC       SIC      HQIC \n-5.738217 -5.734019 -5.738217 -5.736764 \n\n\n\n\n\n\nCode\n# Predict 100 steps ahead using the fitted GARCH(1,1) model\ninvisible(predict(garch_model, n.ahead = 100, plot = TRUE))",
+    "crumbs": [
+      "Financial Time Series Models (ARCH/GARCH)"
+    ]
+  },
+  {
+    "objectID": "financial-ts-models.html#arima110garcg11-model-equation",
+    "href": "financial-ts-models.html#arima110garcg11-model-equation",
+    "title": "Financial Time Series Models (ARCH/GARCH)",
+    "section": "ARIMA(1,1,0)+GARCG(1,1) Model Equation",
+    "text": "ARIMA(1,1,0)+GARCG(1,1) Model Equation\n\n\n\narima+garch",
+    "crumbs": [
+      "Financial Time Series Models (ARCH/GARCH)"
+    ]
   }
 ]
