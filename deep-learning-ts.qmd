@@ -1,8 +1,1085 @@
 ---
 title: "Deep Learning for TS"
-date: "2025-08-30"
+date: "2025-11-26"
 format:
   html:
     embed-resources: true
     toc: true
+    code-fold: true 
+execute:
+  warning: false
+  message: false
+jupyter: tf310
 ---
+
+This section continues my project by integrating modern deep learning methods and comparing them with traditional time-series models. I'll develop forecasting models, critically evaluate their performance, and reflect on how model choice influences forecasting accuracy and usefulness.
+
+# Univariate Deep Learning Forecasting
+::: {.panel-tabset}
+
+**Data Preparation**
+```{python}
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+
+# function part
+def form_arrays(
+    x,
+    lookback=3,
+    delay=1,
+    step=1,
+    feature_columns=[0],
+    target_columns=[0],
+    unique=False,
+    verbose=False,
+):
+    # verbose=True --> report and plot for debugging
+    # unique=True --> don't re-sample:
+    # x1,x2,x3 --> x4 then x4,x5,x6 --> x7 instead of x2,x3,x4 --> x5
+
+    # initialize
+    i_start = 0
+    count = 0
+
+    # initialize output arrays with samples
+    x_out = []
+    y_out = []
+
+    # sequentially build mini-batch samples
+    while i_start + lookback + delay < x.shape[0]:
+
+        # define index bounds
+        i_stop = i_start + lookback
+        i_pred = i_stop + delay
+
+        # report if desired
+        if verbose and count < 2:
+            print("indice range:", i_start, i_stop, "-->", i_pred)
+
+        # method-2: non-vectorized but cleaner
+        indices_to_keep = []
+        j = i_stop
+        while j >= i_start:
+            indices_to_keep.append(j)
+            j = j - step
+
+        # create mini-batch sample
+        xtmp = x[indices_to_keep, :]  # isolate relevant indices
+        xtmp = xtmp[:, feature_columns]  # isolate desire features
+        ytmp = x[i_pred, target_columns]
+        x_out.append(xtmp)
+        y_out.append(ytmp)
+
+        # report if desired
+        if verbose and count < 2:
+            print(xtmp, "-->", ytmp)
+        if verbose and count < 2:
+            print("shape:", xtmp.shape, "-->", ytmp.shape)
+
+        # UPDATE START POINT
+        if unique:
+            i_start += lookback
+        i_start += 1
+        count += 1
+
+    return np.array(x_out), np.array(y_out)
+
+def history_plot(history):
+    FS = 18  # FONT SIZE
+    history_dict = history.history
+    loss_values = history_dict["loss"]
+    val_loss_values = history_dict["val_loss"]
+    epochs = range(1, len(loss_values) + 1)
+
+    # Plot all epochs
+    plt.plot(epochs, val_loss_values, "r", label="Validation loss")
+    plt.plot(epochs, loss_values, "bo", label="Training loss")
+    plt.title("Training and validation loss")
+    plt.xlabel("Epochs")
+    plt.ylabel("Loss")
+    plt.legend()
+    plt.show()
+
+    # Plot last 30 epochs
+    plt.plot(epochs[-30:-1], val_loss_values[-30:-1], "r", label="Validation loss")
+    plt.plot(epochs[-30:-1], loss_values[-30:-1], "bo", label="Training loss")
+    plt.title("Training and validation loss (last epochs)")
+    plt.xlabel("Epochs")
+    plt.ylabel("Loss")
+    plt.legend()
+    plt.show()
+
+
+from sklearn.metrics import mean_squared_error, mean_absolute_error
+import matplotlib.pyplot as plt
+import numpy as np
+
+def regression_report(yt, ytp, yv, yvp):
+    print("---------- Regression report ----------")
+
+    # TRAINING METRICS
+    print("TRAINING:")
+    print(" MSE:", mean_squared_error(yt, ytp))
+    print(" MAE:", mean_absolute_error(yt, ytp))
+
+    # Training parity plot
+    fig, ax = plt.subplots()
+    ax.plot(yt, ytp, "ro", markersize=3, alpha=0.6)
+    ax.plot(yt, yt, "b-", linewidth=1)
+    ax.set(
+        xlabel="Actual y",
+        ylabel="Predicted y",
+        title="Training Parity Plot (perfect fit = blue line)",
+    )
+    plt.show()
+
+    # Training time-series plot
+    fig, ax = plt.subplots()
+    ax.plot(yt, "b-", label="Actual")
+    ax.plot(ytp, "r--", label="Predicted", alpha=0.7)
+    ax.legend()
+    ax.set(
+        xlabel="Index",
+        ylabel="y(t)",
+        title="Training: Time-Series Prediction",
+    )
+    plt.show()
+
+    # VALIDATION METRICS
+    print("VALIDATION:")
+    print(" MSE:", mean_squared_error(yv, yvp))
+    print(" MAE:", mean_absolute_error(yv, yvp))
+
+    # Validation parity plot
+    fig, ax = plt.subplots()
+    ax.plot(yv, yvp, "ro", markersize=3, alpha=0.6)
+    ax.plot(yv, yv, "b-", linewidth=1)
+    ax.set(
+        xlabel="Actual y",
+        ylabel="Predicted y",
+        title="Validation Parity Plot",
+    )
+    plt.show()
+
+    # Validation time-series
+    fig, ax = plt.subplots()
+    ax.plot(yv, "b-", label="Actual")
+    ax.plot(yvp, "r--", label="Predicted", alpha=0.7)
+    ax.legend()
+    ax.set(
+        xlabel="Index",
+        ylabel="y(t)",
+        title="Validation: Time-Series Prediction",
+    )
+    plt.show()
+
+
+# read csv
+la_raw = pd.read_csv("data-raw/la_teu_data.csv", dtype=str)
+
+# adjust data format
+date_str = la_raw["Date"].str.strip()
+date_str = date_str.str.replace(r"-(\d)$", r"-0\1", regex=True)
+la_raw["Date"] = pd.to_datetime(
+    date_str,
+    format="%b-%y",
+    errors="raise"
+)
+
+# handle the num-related columns
+num_cols = [
+    "Loaded_Imports",
+    "Empty_Imports",
+    "Total_Imports",
+    "Loaded_Exports",
+    "Empty_Exports",
+    "Total_Exports",
+    "Total_TEUs",
+]
+
+for col in num_cols:
+    col_str = (
+        la_raw[col]
+        .str.strip()
+        .str.replace(",", "", regex=False)
+    )
+    la_raw[col] = pd.to_numeric(col_str, errors="coerce")
+
+# Empty_Containers & Total_calc 
+la_raw["Empty_Containers"] = (
+    la_raw["Empty_Imports"] + la_raw["Empty_Exports"]
+)
+
+la_raw["Total_calc"] = (
+    la_raw["Loaded_Imports"]
+    + la_raw["Loaded_Exports"]
+    + la_raw["Empty_Containers"]
+)
+
+la_raw["Total_TEUs"] = np.where(
+    la_raw["Total_TEUs"].isna(),
+    la_raw["Total_calc"],
+    la_raw["Total_TEUs"],
+)
+
+#  sort& filter
+la_teu = (
+    la_raw
+    .sort_values("Date")
+    .loc[lambda df: df["Date"] >= pd.to_datetime("2000-01-01")]
+    .reset_index(drop=True)
+)
+
+# Create univariate series (Total TEUs)
+t = la_teu["Date"].values                   
+y = la_teu["Total_TEUs"].values.astype(float)
+
+# log-transform to stabilize variance (similar to USD example)
+x = np.log(y)
+x = x.reshape(len(x), 1)
+
+# Normalize the data
+x_mean = np.mean(x, axis=0)
+x_std = np.std(x, axis=0)
+x = (x - x_mean) / x_std  # standardized Total TEUs
+feature_columns = [0]
+target_columns = [0]
+
+print("Full series shape:", x.shape)
+print("Date range:", t[0], "to", t[-1])
+
+# Train / validation split
+split_fraction = 0.75
+cut = int(split_fraction * x.shape[0])
+
+tt = t[0:cut]   # training dates
+xt = x[0:cut]   # training data
+tv = t[cut:]    # validation dates
+xv = x[cut:]    # validation data
+
+print("Training samples:", xt.shape[0])
+print("Validation samples:", xv.shape[0])
+
+# Mini-batch creation 
+L = 12   # lookback window length
+S = 1    # step
+D = 1    # prediction delay
+
+# training arrays
+Xt, Yt = form_arrays(
+    xt,
+    lookback=L,
+    delay=D,
+    step=S,
+    feature_columns=feature_columns,
+    target_columns=target_columns,
+    unique=False,
+    verbose=False,
+)
+
+# validation arrays
+Xv, Yv = form_arrays(
+    xv,
+    lookback=L,
+    delay=D,
+    step=S,
+    feature_columns=feature_columns,
+    target_columns=target_columns,
+    unique=False,
+    verbose=False,
+)
+
+
+
+print("---------- Data setup ----------")
+print("training:", Xt.shape, Yt.shape)
+print("validation:", Xv.shape, Yv.shape)
+
+```
+
+## Recurrent Neural Network (RNN)
+```{python}
+from tensorflow import keras
+from tensorflow.keras import layers, regularizers
+from keras.layers import Dense, SimpleRNN, LSTM, GRU, Dropout
+from tensorflow.keras.callbacks import EarlyStopping
+import numpy as np
+from math import sqrt
+from sklearn.metrics import mean_squared_error
+import tensorflow as tf
+
+import numpy as np
+import random
+
+tf.random.set_seed(42)
+np.random.seed(42)
+
+
+# ========= SHARED HYPERPARAMETERS =========
+loss_function = "MeanSquaredError"
+learning_rate = 0.001
+numbers_epochs = 250          
+L1 = 1e-4                   
+L2 = 1e-4
+batch_size = 32         
+input_shape = (Xt.shape[1], Xt.shape[2])
+recurrent_hidden_units = 32
+
+# early stop to prevent overfitting
+early_stop = EarlyStopping(
+    monitor="val_loss",
+    patience=10,
+    restore_best_weights=True
+)
+
+def compute_rmse(y_true, y_pred):
+    return sqrt(mean_squared_error(y_true, y_pred))
+
+
+# SIMPLE RNN MODEL
+model_rnn = keras.Sequential()
+model_rnn.add(SimpleRNN(
+    units=20,
+    activation='tanh',
+    input_shape=input_shape,
+    recurrent_regularizer=regularizers.L1(L1),
+    return_sequences=False
+))
+model_rnn.add(Dropout(0.2))
+model_rnn.add(Dense(
+    units=1,
+    kernel_regularizer=regularizers.L1L2(l1=L1, l2=L2),
+    activation="linear"
+))
+
+print(model_rnn.summary())
+
+opt = keras.optimizers.RMSprop(learning_rate=learning_rate)
+model_rnn.compile(optimizer=opt, loss=loss_function)
+
+history_rnn = model_rnn.fit(
+    Xt,
+    Yt,
+    epochs=numbers_epochs,
+    batch_size=batch_size,
+    verbose=False,
+    validation_data=(Xv, Yv),
+    callbacks=[early_stop],
+)
+
+print("=== RNN: Training history ===")
+history_plot(history_rnn)
+
+Ytp_rnn = model_rnn.predict(Xt)
+Yvp_rnn = model_rnn.predict(Xv)
+
+print("=== RNN results on Port of LA Total_TEUs ===")
+regression_report(Yt, Ytp_rnn, Yv, Yvp_rnn)
+print("RNN Train RMSE:", compute_rmse(Yt, Ytp_rnn))
+print("RNN Valid RMSE:", compute_rmse(Yv, Yvp_rnn))
+
+Yvp_rnn_original = Yvp_rnn * x_std + x_mean  
+Yvp_rnn_original = np.exp(Yvp_rnn_original)  
+
+# 然后计算原始尺度的 RMSE
+rmse_rnn_original = np.sqrt(mean_squared_error(
+    np.exp(Yv * x_std + x_mean), 
+    Yvp_rnn_original
+))
+print(f"RNN RMSE (original scale): {rmse_rnn_original:.2f} TEUs")
+```
+
+## Gated Recurrent Unit (GRU)
+```{python}
+from tensorflow.keras.layers import GRU, Dropout, Dense
+from tensorflow import keras
+from tensorflow.keras import regularizers
+import numpy as np
+import random
+import tensorflow as tf
+
+tf.random.set_seed(42)
+np.random.seed(42)
+
+model_gru = keras.Sequential()
+
+model_gru.add(GRU(
+    units=16,  
+    activation='tanh',  
+    recurrent_dropout=0.2,  
+    dropout=0.2,  
+    input_shape=input_shape,
+    recurrent_regularizer=regularizers.L2(1e-4), 
+    return_sequences=False
+))
+
+model_gru.add(Dropout(0.3)) 
+
+model_gru.add(Dense(
+    units=1,
+    kernel_regularizer=regularizers.L2(1e-4), 
+    activation='linear'
+))
+
+opt_gru = keras.optimizers.Adam(learning_rate=0.001)
+model_gru.compile(optimizer=opt_gru, loss="mse")
+
+history_gru = model_gru.fit(
+    Xt, Yt,
+    epochs=200,
+    batch_size=8,            
+    verbose=False,
+    validation_data=(Xv, Yv),
+    callbacks=[early_stop],
+)
+
+print("=== GRU: Training history ===")
+history_plot(history_gru)
+
+Ytp = model_gru.predict(Xt)
+Yvp = model_gru.predict(Xv)
+
+print("=== GRU results on Port of LA Total_TEUs ===")
+regression_report(Yt, Ytp, Yv, Yvp)
+
+from sklearn.metrics import mean_squared_error
+
+gru_train_rmse = np.sqrt(mean_squared_error(Yt, Ytp))
+gru_valid_rmse = np.sqrt(mean_squared_error(Yv, Yvp))
+
+print("GRU Train RMSE:", gru_train_rmse)
+print("GRU Valid RMSE:", gru_valid_rmse)
+
+Yvp_gru_original = Yvp * x_std + x_mean         
+Yvp_gru_original = np.exp(Yvp_gru_original)
+
+Yv_original = np.exp(Yv * x_std + x_mean)
+
+rmse_gru_original = np.sqrt(mean_squared_error(Yv_original, Yvp_gru_original))
+print(f"GRU RMSE (original scale): {rmse_gru_original:.2f} TEUs")
+```
+
+## Long Short-Term Memory (LSTM)
+```{python}
+from tensorflow.keras.layers import LSTM, Dense
+from tensorflow import keras
+import numpy as np
+import tensorflow as tf
+
+tf.random.set_seed(42)
+np.random.seed(42)
+
+model_lstm = keras.Sequential()
+
+model_lstm.add(LSTM(
+    units=12,
+    activation='tanh',
+    recurrent_activation='sigmoid',
+    recurrent_dropout=0.25, 
+    dropout=0.35,  
+    input_shape=input_shape,
+    recurrent_regularizer=regularizers.L1L2(l1=1e-4, l2=1e-4),  
+    kernel_regularizer=regularizers.L1L2(l1=1e-4, l2=1e-4),
+    return_sequences=False
+))
+
+model_lstm.add(Dropout(0.4))
+
+model_lstm.add(Dense(
+    units=1,
+    kernel_regularizer=regularizers.L2(1e-3),  #1e-4 → 1e-3
+    activation='linear'
+))
+
+opt_lstm = keras.optimizers.Adam(learning_rate=0.0003)  # 0.001 → 0.0003
+
+model_lstm.compile(optimizer=opt_lstm, loss='mse')
+
+early_stop_strict = EarlyStopping(
+    monitor="val_loss",
+    patience=20,
+    restore_best_weights=True,
+    min_delta=0.005  
+)
+
+history_lstm = model_lstm.fit(
+    Xt, Yt,
+    epochs=300,  
+    batch_size=32,  
+    verbose=False,
+    validation_data=(Xv, Yv),
+    callbacks=[early_stop_strict],
+)
+
+print("=== LSTM: Training history ===")
+history_plot(history_lstm)
+
+# Predictions
+Ytp_lstm = model_lstm.predict(Xt)
+Yvp_lstm = model_lstm.predict(Xv)
+
+print("=== LSTM results on Port of LA Total_TEUs ===")
+regression_report(Yt, Ytp_lstm, Yv, Yvp_lstm)
+
+# RMSE
+lstm_train_rmse = np.sqrt(mean_squared_error(Yt, Ytp_lstm))
+lstm_valid_rmse = np.sqrt(mean_squared_error(Yv, Yvp_lstm))
+print("LSTM Train RMSE:", lstm_train_rmse)
+print("LSTM Validation RMSE:", lstm_valid_rmse)
+Yvp_lstm_original = Yvp * x_std + x_mean
+Yvp_lstm_original = np.exp(Yvp_lstm_original)
+
+Yv_original = np.exp(Yv * x_std + x_mean)
+
+rmse_lstm_original = np.sqrt(mean_squared_error(Yv_original, Yvp_lstm_original))
+print(f"LSTM RMSE (original scale): {rmse_lstm_original:.2f} TEUs")
+```
+
+:::
+
+### Analysis
+#### 1. Relative Performance
+Across the three deep learning models, the Simple RNN achieves the best overall performance, with the lowest validation RMSE (≈0.76) and the most stable prediction pattern. The GRU and LSTM models perform noticeably worse, with validation RMSE values above 0.90 and stronger deviation from the true series.
+
+In terms of forecast behavior, the RNN is better able to follow the general upward trend and moderate fluctuations visible in the TEU series. GRU and LSTM, by contrast, tend to collapse toward the mean and fail to capture short-term variations, leading to flatter predicted curves and weaker correlation in the parity plots. These results suggest that for this relatively small dataset, simpler models generalize better than more complex gated architectures.
+
+#### 2. Effectiveness of Regularization
+Regularization played a crucial role in preventing overfitting.
+For all models, dropout, early stopping, and weight decay were applied, and the training curves show relatively stable convergence without divergence between training and validation loss.
+
+However, stronger regularization (especially in GRU/LSTM) often caused underfitting, flattening their predictions and shrinking their variance. This is a common issue when gated recurrent units are applied to small datasets: excessive regularization overwhelms the model’s capacity and leads to overly conservative predictions.
+
+Overall, regularization improved training stability, but heavy regularization hurt the GRU/LSTM more than the RNN due to the dataset’s small size.
+
+#### 3. Forecast Horizon
+Based on the validation time-series plots, all three models show similar forecast limits.
+
+- **Short-term (1–3 steps ahead):**
+
+RNN predictions generally follow the direction of movement.
+
+GRU and LSTM partially capture near-term changes but remain conservative.
+
+- **Medium-term (3–6 steps ahead):**
+
+All models begin to drift toward the mean.
+
+Peaks and troughs are not accurately captured.
+
+- **Long-term (>6 steps ahead):**
+
+Models lose the seasonal and cyclical structure.
+
+Predictions flatten significantly, especially in GRU/LSTM.
+
+This indicates that these deep learning models are effective for short-horizon forecasting, but their ability to capture longer seasonal dynamics is limited when trained on a relatively small monthly dataset.
+
+#### 4. Comparison with Traditional ARMA/ARIMA Models
+Compared with the ARIMA model from Homework 3, the deep learning models display different strengths and weaknesses.
+
+The seasonal ARIMA(0,1,1)(0,0,2)[12] model achieves a much lower RMSE (~66,959 TEUs on original scale) than the deep learning models (e.g., RNN ≈ 124,682 TEUs). ARIMA also produces more stable residuals and more accurate long-term seasonal forecasts.
+
+- Deep learning models capture nonlinear short-term patterns better but fail to reproduce seasonal cycles due to limited data size and the lack of explicit seasonality structure.
+
+- ARIMA models explicitly model monthly seasonality and cumulative trends, giving them a structural advantage for long-horizon forecasting.
+
+- Deep learning models show higher variance in results, are more sensitive to hyperparameters, and require much larger datasets to outperform classical models.
+
+Overall, for this dataset, ARIMA remains the superior model for long-term and seasonal forecasting, while RNN is the strongest deep learning model for short-term movement prediction, though still inferior to SARIMA in stability and accuracy. 
+
+# Forecasting Performance Reflection
+Across all univariate forecasting models I tested, the traditional SARIMA model achieved the strongest overall performance, with an RMSE of roughly 66,959 TEUs on the original scale. In contrast, the deep learning models—Simple RNN, GRU, and LSTM—showed noticeably higher validation errors, with RNN performing best among them (≈124,682 TEUs) and GRU/LSTM performing worse. These results highlight that model complexity does not necessarily translate into better predictive accuracy, especially when the dataset is relatively small and driven by strong linear and seasonal patterns.
+
+Qualitatively, the choice of model strongly affects the usefulness of the forecast. SARIMA provides stable, interpretable predictions that respect the annual seasonal cycle of port activity, making it more reliable for short- and medium-term planning. Deep learning models, while more flexible and theoretically capable of capturing nonlinear structure, require far more data to generalize well. In this dataset, they tend to overfit the training window and produce less stable long-horizon forecasts.
+
+The comparison taught me that forecasting is ultimately about matching the model to the structure of the data. For a dataset with a clear trend, strong seasonality, and limited sample size, a well-specified classical model can outperform more sophisticated neural networks. Deep learning remains valuable when incorporating richer exogenous factors or nonlinear behaviors, but for this univariate TEU series, SARIMA is the most appropriate tool.
+
+# Multivariate Forecasting – Deep Learning vs Traditional Models
+::: {.panel-tabset}
+**Data Preparation**
+```{python}
+
+usd = pd.read_csv("data-raw/usd.csv") 
+
+usd["Date"] = pd.to_datetime(usd["observation_date"])
+usd = usd.sort_values("Date")
+
+usd = usd[["Date", "DTWEXBGS"]].rename(columns={"DTWEXBGS": "USD_Index"})
+
+df_multi = pd.merge(
+    la_teu[["Date", "Loaded_Imports", "Loaded_Exports", "Total_TEUs"]],
+    usd,
+    on="Date",
+    how="inner"     
+).reset_index(drop=True)
+
+df_multi = df_multi.dropna(
+    subset=["Loaded_Imports", "Loaded_Exports", "Total_TEUs", "USD_Index"]
+).reset_index(drop=True)
+
+print("Merged shape:", df_multi.shape)
+print(df_multi.head())
+```
+
+```{python}
+data_vals = df_multi[[
+    "Loaded_Imports",
+    "Loaded_Exports",
+    "USD_Index",
+    "Total_TEUs"
+]].astype(float).values   
+
+# log transform
+log_vals = np.log(data_vals)
+
+# standarlization
+log_mean = log_vals.mean(axis=0)
+log_std = log_vals.std(axis=0)
+z_vals = (log_vals - log_mean) / log_std  
+
+t = df_multi["Date"].values
+
+print("Full multivariate series shape:", z_vals.shape)
+print("Date range:", t[0], "to", t[-1])
+
+split_fraction = 0.75
+cut = int(split_fraction * z_vals.shape[0])
+
+xt = z_vals[:cut, :]    
+xv = z_vals[cut:, :]    
+tt = t[:cut]
+tv = t[cut:]
+
+print("Training points:", xt.shape[0])
+print("Validation points:", xv.shape[0])
+```
+
+## Recurrent Neural Network (RNN)
+```{python}
+feature_columns = [0, 2]
+target_columns  = [3]
+
+L = 16  
+S = 1
+D = 1
+
+Xt, Yt = form_arrays(
+    xt,
+    lookback=L,
+    delay=D,
+    step=S,
+    feature_columns=feature_columns,
+    target_columns=target_columns,
+    unique=False,
+    verbose=False,
+)
+
+Xv, Yv = form_arrays(
+    xv,
+    lookback=L,
+    delay=D,
+    step=S,
+    feature_columns=feature_columns,
+    target_columns=target_columns,
+    unique=False,
+    verbose=False,
+)
+
+print("---------- Multivariate Data setup ----------")
+print("training:", Xt.shape, Yt.shape)
+print("validation:", Xv.shape, Yv.shape)
+
+def compute_rmse(y_true, y_pred):
+    y_true = np.array(y_true).reshape(-1)
+    y_pred = np.array(y_pred).reshape(-1)
+    return sqrt(mean_squared_error(y_true, y_pred))
+
+def regression_report(yt, ytp, yv, yvp):
+    yt  = np.array(yt).reshape(-1)
+    ytp = np.array(ytp).reshape(-1)
+    yv  = np.array(yv).reshape(-1)
+    yvp = np.array(yvp).reshape(-1)
+
+    print("---------- Regression report ----------")
+
+    # TRAINING METRICS
+    print("TRAINING:")
+    print(" MSE:", mean_squared_error(yt, ytp))
+    print(" MAE:", mean_absolute_error(yt, ytp))
+
+    # Training parity plot
+    fig, ax = plt.subplots()
+    ax.plot(yt, ytp, "ro", markersize=3, alpha=0.6)
+    ax.plot(yt, yt, "b-", linewidth=1)
+    ax.set(
+        xlabel="Actual y",
+        ylabel="Predicted y",
+        title="Training Parity Plot (perfect fit = blue line)",
+    )
+    plt.show()
+
+    # Training time-series plot
+    fig, ax = plt.subplots()
+    ax.plot(yt, "b-", label="Actual")
+    ax.plot(ytp, "r--", label="Predicted", alpha=0.7)
+    ax.legend()
+    ax.set(
+        xlabel="Index",
+        ylabel="y(t)",
+        title="Training: Time-Series Prediction",
+    )
+    plt.show()
+
+    # VALIDATION METRICS
+    print("VALIDATION:")
+    print(" MSE:", mean_squared_error(yv, yvp))
+    print(" MAE:", mean_absolute_error(yv, yvp))
+
+    # Validation parity plot
+    fig, ax = plt.subplots()
+    ax.plot(yv, yvp, "ro", markersize=3, alpha=0.6)
+    ax.plot(yv, yv, "b-", linewidth=1)
+    ax.set(
+        xlabel="Actual y",
+        ylabel="Predicted y",
+        title="Validation Parity Plot",
+    )
+    plt.show()
+
+    # Validation time-series
+    fig, ax = plt.subplots()
+    ax.plot(yv, "b-", label="Actual")
+    ax.plot(yvp, "r--", label="Predicted", alpha=0.7)
+    ax.legend()
+    ax.set(
+        xlabel="Index",
+        ylabel="y(t)",
+        title="Validation: Time-Series Prediction",
+    )
+    plt.show()
+
+loss_function = "MeanSquaredError"
+learning_rate = 0.001
+numbers_epochs = 250
+L1 = 1e-4
+L2 = 1e-4
+batch_size = 32
+input_shape = (Xt.shape[1], Xt.shape[2])   # (12, 2)
+recurrent_hidden_units = 32
+
+early_stop = EarlyStopping(
+    monitor="val_loss",
+    patience=10,
+    restore_best_weights=True
+)
+
+model_rnn_multi = keras.Sequential()
+model_rnn_multi.add(SimpleRNN(
+    units=20,
+    activation='tanh',
+    input_shape=input_shape,
+    dropout=0.3,
+    recurrent_dropout=0.3, 
+    recurrent_regularizer=regularizers.L2(5e-4),  
+    return_sequences=False
+))
+model_rnn_multi.add(Dropout(0.4))  
+model_rnn_multi.add(Dense(
+    units=1,
+    kernel_regularizer=regularizers.L2(5e-4), 
+    activation="linear"
+))
+
+opt = keras.optimizers.Adam(learning_rate=0.0005)  
+model_rnn_multi.compile(optimizer=opt, loss='mse')
+
+early_stop_strict = EarlyStopping(
+    monitor="val_loss",
+    patience=15,  # 10 → 15
+    restore_best_weights=True,
+    min_delta=0.005
+)
+
+history_rnn_multi = model_rnn_multi.fit(
+    Xt, Yt,
+    epochs=300,
+    batch_size=32,
+    verbose=0,
+    validation_data=(Xv, Yv),
+    callbacks=[early_stop_strict],
+)
+
+print("=== Multivariate RNN: Training history ===")
+history_plot(history_rnn_multi)
+
+Ytp_rnn_multi = model_rnn_multi.predict(Xt)
+Yvp_rnn_multi = model_rnn_multi.predict(Xv)
+
+print("=== Multivariate RNN results on Port of LA Total_TEUs ===")
+regression_report(Yt, Ytp_rnn_multi, Yv, Yvp_rnn_multi)
+print("Multivariate RNN Train RMSE:", compute_rmse(Yt, Ytp_rnn_multi))
+print("Multivariate RNN Valid RMSE:", compute_rmse(Yv, Yvp_rnn_multi))
+
+
+Yvp_rnn_multi_original = np.exp((Yvp_rnn_multi.reshape(-1) * x_std) + x_mean)
+
+Yv_original = np.exp((Yv.reshape(-1) * x_std) + x_mean)
+
+rmse_rnn_multi_original = np.sqrt(mean_squared_error(Yv_original, Yvp_rnn_multi_original))
+print(f"Multivariate RNN RMSE (original scale): {rmse_rnn_multi_original:.2f} TEUs")
+
+
+```
+
+## GRU
+```{python}
+# ========================================
+# MULTIVARIATE GRU MODEL
+# ========================================
+
+import tensorflow as tf
+import numpy as np
+from tensorflow import keras
+from tensorflow.keras.layers import GRU, Dense, Dropout
+from tensorflow.keras import regularizers
+from tensorflow.keras.callbacks import EarlyStopping
+from sklearn.metrics import mean_squared_error
+from math import sqrt
+
+# Set random seeds for reproducibility
+tf.random.set_seed(42)
+np.random.seed(42)
+
+# ========= HYPERPARAMETERS =========
+loss_function = "MeanSquaredError"
+learning_rate = 0.0005
+numbers_epochs = 300
+L1 = 1e-4
+L2 = 1e-4
+batch_size = 32
+input_shape = (Xt.shape[1], Xt.shape[2])   # (12, 2) for lookback=12, features=2
+recurrent_hidden_units = 16  # Smaller for multivariate to prevent overfitting
+
+# Early stopping callback
+early_stop = EarlyStopping(
+    monitor="val_loss",
+    patience=15,
+    restore_best_weights=True,
+    min_delta=0.003
+)
+
+# ========= CREATE MODEL =========
+model_gru_multi = keras.Sequential()
+
+# ADD RECURRENT LAYER
+model_gru_multi.add(GRU(
+    units=recurrent_hidden_units,
+    activation='tanh',  # tanh often more stable than relu for small datasets
+    input_shape=input_shape,
+    dropout=0.3,
+    recurrent_dropout=0.3,
+    recurrent_regularizer=regularizers.L2(5e-4),  # L2 for multivariate
+    return_sequences=False
+))
+
+model_gru_multi.add(Dropout(0.35))
+
+model_gru_multi.add(Dense(
+    units=1, 
+    kernel_regularizer=regularizers.L2(5e-4), 
+    activation='linear'
+))
+
+# MODEL SUMMARY
+print(model_gru_multi.summary())
+
+# ========= COMPILING THE MODEL =========
+opt = keras.optimizers.Adam(learning_rate=learning_rate, clipnorm=1.0)
+model_gru_multi.compile(optimizer=opt, loss=loss_function)
+
+# ========= TRAINING YOUR MODEL =========
+history_gru_multi = model_gru_multi.fit(
+    Xt,
+    Yt,
+    epochs=numbers_epochs,
+    batch_size=batch_size,
+    verbose=False,
+    validation_data=(Xv, Yv),
+    callbacks=[early_stop],
+)
+
+# ========= History plot =========
+print("=== Multivariate GRU: Training history ===")
+history_plot(history_gru_multi)
+
+# ========= Predictions =========
+Ytp_gru_multi = model_gru_multi.predict(Xt)
+Yvp_gru_multi = model_gru_multi.predict(Xv)
+
+# ========= REPORT =========
+print("=== Multivariate GRU results on Port of LA Total_TEUs ===")
+regression_report(Yt, Ytp_gru_multi, Yv, Yvp_gru_multi)
+
+# ========= RMSE =========
+print("Multivariate GRU Train RMSE:", compute_rmse(Yt, Ytp_gru_multi))
+print("Multivariate GRU Valid RMSE:", compute_rmse(Yv, Yvp_gru_multi))
+
+# ======= Restore to original scale: MULTIVARIATE GRU =======
+
+Yvp_gru_multi_original = np.exp((Yvp_gru_multi.reshape(-1) * x_std) + x_mean)
+
+Yv_original = np.exp((Yv.reshape(-1) * x_std) + x_mean)
+
+rmse_gru_multi_original = np.sqrt(mean_squared_error(Yv_original, Yvp_gru_multi_original))
+print(f"Multivariate GRU RMSE (original scale): {rmse_gru_multi_original:.2f} TEUs")
+
+```
+
+## LSTM
+```{python}
+from tensorflow.keras.layers import LSTM, Dense, Dropout
+from tensorflow import keras
+from tensorflow.keras import regularizers
+import numpy as np
+import tensorflow as tf
+from tensorflow.keras.callbacks import EarlyStopping
+from sklearn.metrics import mean_squared_error
+
+tf.random.set_seed(42)
+np.random.seed(42)
+
+loss_function = "MeanSquaredError"
+learning_rate_lstm = 0.0005      
+numbers_epochs_lstm = 300
+batch_size_lstm = 32
+lstm_units = 4                 
+L1_lstm = 1e-4
+L2_lstm = 1e-4
+
+tf.random.set_seed(42)
+np.random.seed(42)
+
+model_lstm_multi = keras.Sequential()
+
+model_lstm_multi.add(LSTM(
+    units=8, 
+    activation='tanh',
+    recurrent_activation='hard_sigmoid', 
+    input_shape=input_shape,
+    dropout=0.4,  
+    recurrent_dropout=0.4,
+    recurrent_regularizer=regularizers.L2(1e-3),  
+    kernel_regularizer=regularizers.L2(1e-3),
+    return_sequences=False
+))
+
+model_lstm_multi.add(Dropout(0.5))  
+
+model_lstm_multi.add(Dense(
+    units=1,
+    kernel_regularizer=regularizers.L2(1e-3),
+    activation='linear'
+))
+
+opt_lstm = keras.optimizers.Adam(learning_rate=0.0002, clipnorm=1.0) 
+model_lstm_multi.compile(optimizer=opt_lstm, loss='mse')
+
+early_stop_lstm = EarlyStopping(
+    monitor="val_loss",
+    patience=30,  
+    min_delta=0.005,  
+    restore_best_weights=True
+)
+
+history_lstm_multi = model_lstm_multi.fit(
+    Xt, Yt,
+    epochs=350, 
+    batch_size=32,
+    verbose=0,
+    validation_data=(Xv, Yv),
+    callbacks=[early_stop_lstm],
+)
+
+print("=== Multivariate LSTM: Training history ===")
+history_plot(history_lstm_multi)
+
+Ytp_lstm_multi = model_lstm_multi.predict(Xt)
+Yvp_lstm_multi = model_lstm_multi.predict(Xv)
+
+print("=== Multivariate LSTM results on Port of LA Total_TEUs ===")
+regression_report(Yt, Ytp_lstm_multi, Yv, Yvp_lstm_multi)
+
+lstm_train_rmse = compute_rmse(Yt, Ytp_lstm_multi)
+lstm_valid_rmse = compute_rmse(Yv, Yvp_lstm_multi)
+
+print("Multivariate LSTM Train RMSE:", lstm_train_rmse)
+print("Multivariate LSTM Valid RMSE:", lstm_valid_rmse)
+
+# ======= Restore to original scale: MULTIVARIATE LSTM =======
+
+Yvp_lstm_multi_original = np.exp((Yvp_lstm_multi.reshape(-1) * x_std) + x_mean)
+Yv_original = np.exp((Yv.reshape(-1) * x_std) + x_mean)
+
+rmse_lstm_multi_original = np.sqrt(mean_squared_error(Yv_original, Yvp_lstm_multi_original))
+print(f"Multivariate LSTM RMSE (original scale): {rmse_lstm_multi_original:.2f} TEUs")
+
+```
+:::
+
+In the multivariate forecasting experiment, the three deep learning models—RNN, GRU, and LSTM—show clear differences in performance. Although all models use Imports and the USD Index to enhance short-term prediction of Total TEUs, the limited dataset (roughly 113 training points) constrains the ability of complex architectures to learn meaningful long-term dependencies. The simple RNN, with fewer parameters and lower model complexity, generalizes best and achieves the lowest validation RMSE, making it the strongest performer in this setting. GRU, despite having a more advanced gating mechanism, tends to overfit with such a small sample and therefore performs slightly worse than the RNN. LSTM, being the most parameter-heavy, overfits the most and delivers the weakest validation accuracy, producing overly smooth predictions that fail to capture true fluctuations. Overall, the results suggest that RNN is the most appropriate model for this dataset’s size and structure, while GRU and LSTM may only outperform it when trained on richer, larger, or more nonlinear multivariate datasets. This comparison highlights that in small-sample forecasting with moderate dynamics, simpler models can generalize more reliably than more complex deep learning architectures.
+
+# Model Comparison
+```{python}
+import pandas as pd
+
+# === Final Comparison Table ===
+
+table = {
+    "Model Type": [
+        "Traditional", "Traditional", "Traditional",
+        "Deep Learning", "Deep Learning", "Deep Learning",
+        "Deep Learning", "Deep Learning", "Deep Learning"
+    ],
+
+    "Model": [
+        "ARIMAX", "SARIMAX", "VAR",
+        "RNN (Uni)", "LSTM (Uni)", "GRU (Uni)",
+        "RNN (Multi)", "LSTM (Multi)", "GRU (Multi)"
+    ],
+
+    "Input Type": [
+        "Multivariate", "Multivariate", "Multivariate",
+        "Univariate", "Univariate", "Univariate",
+        "Multivariate", "Multivariate", "Multivariate"
+    ],
+
+    "RMSE (Original Scale, TEUs)": [
+        83745.32,   # ARIMAX
+        72488.41,   # SARIMAX
+        55090.20,   # VAR
+        125209.31,  # RNN Uni
+        209750.53,  # LSTM Uni
+        209750.53,  # GRU Uni
+        179521.06,  # RNN Multi
+        169158.02,  # LSTM Multi
+        160956.87   # GRU Multi
+    ]
+}
+
+df_results = pd.DataFrame(table)
+
+display(df_results.style.hide(axis="index"))
+```
+
+In this project, I compared traditional time-series models with deep learning architectures for forecasting Port of Los Angeles throughput. The results show a very clear pattern: traditional econometric models outperform all deep learning models by a large margin. The VAR model achieves the lowest RMSE on the original scale, followed by SARIMAX and ARIMAX, indicating that the relationship between TEUs, imports, exports, and macroeconomic indicators is highly linear and stable, making classical models particularly effective.
+
+Deep learning performance depends strongly on the input structure. In the univariate setting, all neural networks perform poorly, with extremely high RMSE values—LSTM and GRU exceed 200,000 TEUs, showing that single-series learning does not capture the true drivers of port throughput. When multivariate inputs are included, the performance of neural networks improves substantially, with multivariate GRU and LSTM reducing RMSE by roughly 20–25%. However, even the best multivariate deep learning model remains significantly worse than the traditional VAR approach.
+
+From a practical forecasting perspective, these results suggest that port throughput dynamics are dominated by linear interactions with economic variables rather than nonlinear temporal patterns. For real-world use, I would rely on the VAR model due to its accuracy, interpretability, and strong performance even with limited data. Deep learning models may still be useful if more high-frequency or nonlinear features are available, but with the current dataset, classical models clearly provide superior reliability. Overall, this comparison reinforces that model selection must be driven by data characteristics rather than complexity—a simpler model can be more effective when the underlying relationships are structurally linear and economically interpretable.
+
+
+
+
+

@@ -1,2 +1,7 @@
 /.quarto/
 .Rproj.user
+# Virtual environments
+tf310/
+venv/
+env/
+*.venv

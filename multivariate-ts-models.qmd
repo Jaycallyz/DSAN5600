@@ -348,6 +348,12 @@ Based on the results, the lag length could be 1.
 ```{r}
 var_model1 <- VAR(ts_var1, p = 1, type = "both")
 summary(var_model1)
+
+# --- VAR RMSE (for first endogenous variable e.g. Port Throughput) ---
+var_fitted <- fitted(var_model1)[, 1]  
+var_actual <- ts_var1[, 1]             
+var_rmse <- sqrt(mean((var_actual - var_fitted)^2, na.rm = TRUE))
+print(paste("VAR RMSE:", round(var_rmse, 2)))
 ```
 
 ## Cross Validation
@@ -929,6 +935,10 @@ best_model <- Arima(
 )
 
 summary(best_model)
+acc <- accuracy(best_model)
+sarimax_rmse <- acc[1, "RMSE"]
+
+cat("SARIMAX RMSE:", sarimax_rmse)
 ```
 ![model 4](pic/cv4.png) 
 ## Forecast
@@ -1021,8 +1031,19 @@ highlight_output(output)
 ```
 
 ```{r}
+library(astsa)
+fit_arimax <- sarima(res_5, 1, 1, 1) 
+arimax_resid <- fit_arimax$fit$residuals
+
+arimax_rmse <- sqrt(mean(arimax_resid^2, na.rm = TRUE))
+cat("ARIMAX RMSE:", arimax_rmse, "\n")
+```
+
+```{r}
 # Model Diagnostics
 model_output <- capture.output(sarima(res_5, 1,1,1))
+
+
 ```
 ```{r}
 start_line <- grep("Coefficients", model_output)
