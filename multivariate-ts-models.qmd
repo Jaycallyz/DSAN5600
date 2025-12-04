@@ -1045,6 +1045,7 @@ model_output <- capture.output(sarima(res_5, 1,1,1))
 
 
 ```
+
 ```{r}
 start_line <- grep("Coefficients", model_output)
 end_line <- length(model_output)
@@ -1062,6 +1063,176 @@ The Ljung-Box Test p-values are all above the 0.05 significance level, implying 
 
 All coefficients are significant at the 5% significant level.
 
+## Cross Validation
+```{r}
+library(forecast)
+library(ggplot2)
+library(dplyr)
+
+df_arimax5_clean <- df_arimax5 %>%
+  dplyr::select(TEUs, GSCPI, RSAFS) %>%
+  tidyr::drop_na()
+
+ts_m5 <- ts(df_arimax5_clean, 
+            start = c(2015, 10), 
+            frequency = 12)
+
+
+fit_sarimax_safe <- function(y, x, order_main, order_seasonal, period = 12) {
+  tryCatch(
+    {
+      Arima(y,
+            order = order_main,
+            seasonal = list(order = order_seasonal, period = period),
+            xreg = x,
+            method = "ML",
+            transform.pars = FALSE,
+            optim.control = list(maxit = 10000))
+    },
+    error = function(e) {
+      message("Model ", paste0("(", paste(order_main, collapse=","), ")(",
+                               paste(order_seasonal, collapse=","), ")[", period, "]"),
+              " failed: ", conditionMessage(e),
+              " -> fallback to simpler model.")
+      
+      new_seasonal <- c(min(order_seasonal[1], 1), order_seasonal[2], order_seasonal[3])
+      Arima(y,
+            order = order_main,
+            seasonal = list(order = new_seasonal, period = period),
+            xreg = x,
+            method = "ML",
+            transform.pars = FALSE,
+            optim.control = list(maxit = 10000))
+    }
+  )
+}
+
+
+# 3. Time Series Cross-Validation
+data <- ts_m5
+n <- nrow(data)
+h <- 12                          
+k <- floor(n / 3 / h) * h       
+num_iter <- (n - k) / h          
+freq <- frequency(data)
+st <- tsp(data)[1] + (k - 1) / freq
+
+rmse_auto <- matrix(NA_real_, nrow = num_iter, ncol = h)
+rmse_manual <- matrix(NA_real_, nrow = num_iter, ncol = h)
+
+# 4. Rolling Window Cross-Validation
+for (i in 1:num_iter) {
+
+  xtrain <- window(data, end = st + i - 1)
+  xtest  <- window(data, start = st + (i - 1) + 1/freq, end = st + i)
+  
+  y_tr <- xtrain[, "TEUs"]
+  x_tr <- xtrain[, c("GSCPI", "RSAFS"), drop = FALSE]
+  y_te <- xtest[, "TEUs"]
+  x_te <- xtest[, c("GSCPI", "RSAFS"), drop = FALSE]
+  
+  m_auto <- auto.arima(y_tr, xreg = x_tr)
+  f_auto <- forecast(m_auto, h = h, xreg = x_te)
+  rmse_auto[i, ] <- (as.numeric(f_auto$mean) - as.numeric(y_te))^2
+  
+  m_manual <- fit_sarimax_safe(
+    y = y_tr,
+    x = x_tr,
+    order_main = c(1, 1, 1),
+    order_seasonal = c(0, 0, 0),
+    period = 12
+  )
+  f_manual <- forecast(m_manual, h = h, xreg = x_te)
+  rmse_manual[i, ] <- (as.numeric(f_manual$mean) - as.numeric(y_te))^2
+}
+
+rmse_auto_avg <- sqrt(colMeans(rmse_auto, na.rm = TRUE))
+rmse_manual_avg <- sqrt(colMeans(rmse_manual, na.rm = TRUE))
+
+error_table <- data.frame(
+  Horizon = 1:h,
+  Auto_ARIMAX = rmse_auto_avg,
+  Manual_ARIMA = rmse_manual_avg
+)
+
+
+ggplot(error_table, aes(x = Horizon)) +
+  geom_line(aes(y = Auto_ARIMAX, color = "Auto ARIMAX"), size = 1) +
+  geom_line(aes(y = Manual_ARIMA, color = "Manual ARIMA(1,1,1)"), size = 1) +
+  geom_point(aes(y = Auto_ARIMAX, color = "Auto ARIMAX"), size = 2) +
+  geom_point(aes(y = Manual_ARIMA, color = "Manual ARIMA(1,1,1)"), size = 2) +
+  labs(title = "RMSE Comparison: 12-Step ARIMAX Forecasts (TEUs ~ GSCPI + RSAFS)",
+       x = "Forecast Horizon (Months Ahead)",
+       y = "RMSE (TEUs)") +
+  scale_color_manual(name = "Models",
+                     values = c("Auto ARIMAX" = "red",
+                                "Manual ARIMA(1,1,1)" = "blue")) +
+  theme_minimal() +
+  theme(legend.position = "bottom")
+```
+ARIMA(1,0,0) looks better.
+
+## Model Equation
+```{r}
+# ====================================
+# ARIMAX Model: TEUs ~ GSCPI + RSAFS
+# ====================================
+
+# Model Specification: ARIMA(1,0,0) with external regressors
+best_model_arimax <- Arima(
+  ts_m5[, "TEUs"],                                    # Response variable
+  order = c(1, 0, 0),                                 # ARIMA(1,0,0): AR(1) model
+  seasonal = list(order = c(0, 0, 0), period = 12),  # No seasonal component
+  xreg = ts_m5[, c("GSCPI", "RSAFS")],               # External regressors
+  method = "ML",                                      # Maximum Likelihood estimation
+  optim.control = list(maxit = 10000)
+)
+
+# Model Summary
+summary(best_model_arimax)
+
+```
+
+Model: ARIMA(1,0,0) with external regressors
+
+Equation:
+TEUs_t = 618947.4 + 12031.24 × GSCPI_t + 0.2941 × RSAFS_t + η_t
+η_t = 0.5662 × η_(t-1) + ε_t
+ε_t ~ WN(0, 7.244×10⁹)
+
+Where:
+- TEUs_t: Container throughput at time t
+- GSCPI_t: Global Supply Chain Pressure Index
+- RSAFS_t: Retail Sales (Food Services)
+- η_t: AR(1) error term
+- ε_t: White noise innovation
+
+## Forecast
+```{r}
+library(forecast)
+library(ggplot2)
+
+arima_gscpi <- auto.arima(ts_m5[, "GSCPI"])
+f_gscpi <- forecast(arima_gscpi, h = 12)
+
+arima_rsafs <- auto.arima(ts_m5[, "RSAFS"])
+f_rsafs <- forecast(arima_rsafs, h = 12)
+xreg_future <- cbind(
+  GSCPI = f_gscpi$mean,
+  RSAFS = f_rsafs$mean
+)
+
+f_teu <- forecast(best_model_arimax, xreg = xreg_future, h = 12)
+
+autoplot(f_teu) +
+  labs(
+    title = "12-Month Forecast of Port Throughput (ARIMAX with GSCPI + RSAFS)",
+    x = "Time",
+    y = "Port Throughput (TEUs)"
+  ) +
+  theme_minimal()
+
+```
 
 :::
 
