@@ -61,4 +61,4 @@ To isolate the effect of major disruptions, I applied an Interrupted Time Series
 - Among all models, the simple VAR(1) model is the best one
 - GARCH modeling revealed strong volatility persistence in the transportation sector
 - COVID-19 created a structural shift rather than a short-term drop.
-- And most importantly, to choose a model fitting your data rather than the complex one.
+- And most importantly is to choose a model fitting your data rather than the complex one.
