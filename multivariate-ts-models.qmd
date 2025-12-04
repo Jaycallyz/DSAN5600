@@ -492,6 +492,12 @@ summary(var_model2_1)
 ```{r}
 var_model2_2 <- VAR(ts_var2, p = 3, type = "both")
 summary(var_model2_2)
+
+# --- VAR RMSE (for first endogenous variable e.g. Port Throughput) ---
+var_fitted <- fitted(var_model2_2)[, 1]  
+var_actual <- ts_var2[, 1]             
+var_rmse <- sqrt(mean((var_actual - var_fitted)^2, na.rm = TRUE))
+print(paste("VAR RMSE:", round(var_rmse, 2)))
 ```
 
 ## Cross Validation
@@ -649,6 +655,11 @@ summary(var_model3_1)
 ```{r}
 var_model3_2 <- VAR(ts_var3, p = 2, type = "both")
 summary(var_model3_2)
+# --- VAR RMSE (for first endogenous variable e.g. Port Throughput) ---
+var_fitted <- fitted(var_model3_2)[, 1]  
+var_actual <- ts_var3[, 1]             
+var_rmse <- sqrt(mean((var_actual - var_fitted)^2, na.rm = TRUE))
+print(paste("VAR RMSE:", round(var_rmse, 2)))
 ```
 
 ## Cross Validation
@@ -1191,6 +1202,10 @@ best_model_arimax <- Arima(
 # Model Summary
 summary(best_model_arimax)
 
+acc <- accuracy(best_model_arimax)
+sarimax_rmse <- acc[1, "RMSE"]
+
+cat("ARIMAX RMSE:", sarimax_rmse)
 ```
 
 Model: ARIMA(1,0,0) with external regressors
