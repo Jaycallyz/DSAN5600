@@ -56,9 +56,9 @@ When I incorporated additional variables—such as oil prices, the USD Index, an
 To isolate the effect of major disruptions, I applied an Interrupted Time Series framework focusing on the COVID-19 period. The immediate drop in TEUs around early 2020 was not statistically significant, but the long-term trajectory changed meaningfully. After the intervention point, TEUs began rising at a noticeably faster rate, reflecting post-pandemic recovery, restocking cycles, and renewed demand. This suggests that structural changes matter more than short-term volatility when examining port throughput. By capturing both immediate and delayed effects, the ITS approach helped me understand how large-scale shocks reshape port activity over time.
 
 # Final Summary
-Returning to my original question: what actually drives container throughput at the Port of Los Angeles?
-The answer is simpler than I expected.
 
-Container throughput is driven by three core factors: energy costs, currency dynamics, and supply-chain stress. These forces move together in stable, linear ways that simple models capture well. Even major disruptions like COVID-19 didn't break these relationships—they just shifted the long-term trajectory.
-
-What does this mean in practice? For port managers, forecasters, or policymakers, the lesson is clear: focus on understanding the economic drivers, not building overly complex models. The port's story is already written in oil prices, dollar strength, and supply-chain conditions—we just need to read it correctly.
+- The Port of LA may driven by three stable forces: oil prices, currency strength, and supply-chain conditions.
+- Among all models, the simple VAR(1) model is the best one
+- GARCH modeling revealed strong volatility persistence in the transportation sector
+- COVID-19 created a structural shift rather than a short-term drop.
+- And most importantly, to choose a model fitting your data rather than the complex one.
